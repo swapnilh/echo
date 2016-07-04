@@ -144,6 +144,7 @@ float update_probability = .7;       // Prob. that next put is to existing val
 uint64_t max_key;
 //uint64_t UINT_64_ALMOST_MAX = 184467440737095u;
 uint64_t UINT_64_ALMOST_MAX = 1844674407u;
+int operations = 1000; // Number of operations to perform
 
 char *log_file_name = "kpvm_logged_errors.out";
 FILE *log_file;
@@ -232,29 +233,8 @@ void *worker_thread_entrypoint(void *arg);
 void *measurement_thread_entrypoint(void *arg);
 void ramp_up_threads(int num_threads);
 
-/* Threaded macrobenchmarks */
-void *fixed_benchmark_entrypoint(void *arg);
-void fixed_generic_benchmark(int num_threads, char* bench_string,
-                             bool slam_local, bool split_keys,
-                             bool measurement_thread);
-void fixed_global_benchmark(int num_threads);
-void fixed_local_benchmark(int num_threads);
-void fixed_read_benchmark(int num_threads);
-void fixed_write_benchmark(int num_threads);
-void fixed_update_benchmark(int num_threads);
-void fixed_zero_benchmark(int num_threads);
-void fixed_twenty_benchmark(int num_threads);
-void fixed_forty_benchmark(int num_threads);
-void fixed_sixty_benchmark(int num_threads);
-void fixed_eighty_benchmark(int num_threads);
-void fixed_hundred_benchmark(int num_threads);
-void fixed_with_measurement_thread(int num_threads);
 /* Wrappers for single-threaded evaluations */
 void *little_latency_wrapper(void *arg);
-void *little_workload_wrapper(void *arg);
-void *little_kvsize_wrapper(void *arg);
-void *little_cache_wrapper(void *arg);
-void single_worker_test(void);
 
 /* utilities*/
 void set_process_affinity();
@@ -1594,7 +1574,7 @@ int local_keyvalue_size(int num_iterations, kp_kv_local *kv) {
  * busy with a random workload constantly, to maximize numbers
  */
 void *worker_thread_entrypoint(void *arg){
-  int i, rc;
+  int i, rc, ops;
   int num_puts;
   int total_ops;
   char *ret_string;
@@ -1616,6 +1596,7 @@ void *worker_thread_entrypoint(void *arg){
   num_puts = 0;
   total_ops = 0;
   i = 0;
+  ops = 0;
   ints = thread_args->ints;
   
   struct timeval *start = malloc(sizeof(struct timeval));
@@ -1628,7 +1609,9 @@ void *worker_thread_entrypoint(void *arg){
 
   /* Do work as long as measurement is still going on */
   trans = generic_trans_start(worker);
-  while(measurement_in_progress){
+//  while(measurement_in_progress){
+  for (ops=0; ops < operations; ops++) {
+    printf("WORKER %d operation %d/%d\n", tid, ops, operations);
     if(total_ops == 0) { // first operation!
       kp_print("actually starting now\n");
       gettimeofday(start,NULL);
@@ -1873,9 +1856,9 @@ void ramp_up_threads(int num_threads){
   reset_thpt();
   //  sleep(2);
   //  measurement_in_progress = true;
-  kp_print("sleeping to allow threads enough time\n");
-  sleep(5);
-  kp_print("waking up from sleep\n");
+//  kp_print("sleeping to allow threads enough time\n");
+//  sleep(5);
+//  kp_print("waking up from sleep\n");
 
   /* Send cancellation requests */
   measurement_in_progress = false;
@@ -1923,496 +1906,6 @@ void ramp_up_threads(int num_threads){
 unsigned int threads_working = 0;
 int64_t ops_remaining=0;
 
-void *fixed_benchmark_entrypoint(void *arg){
-  char *ret_string;
-  bool trans_merged = true;
-  int num_puts = 0;
-  unsigned long tid;
-  benchmark_thread_args *thread_args;
-  pthread_cond_t *bench_cond;
-  pthread_mutex_t *bench_mutex;
-  void *master;
-  void *worker;
-  void *trans = NULL;
-  int i = -1234;  //get rid of gcc warning
-  int rc, starting_ops;
-  int my_completed_ops = 0;
-  int ret = 0, conflicts = 0, commits = 0;
-  random_ints *ints;
-
-  /* setup thread */
-  tid = pthread_self();
-  thread_args = (benchmark_thread_args *) arg;
-  master = thread_args->master;
-  starting_ops = thread_args->starting_ops;
-  bench_cond = thread_args->bench_cond;
-  bench_mutex = thread_args->bench_mutex;
-  worker = generic_worker_create(master);
-  ints = thread_args->ints;
-
-  int my_num = thread_args->my_id;
-  int key_count = 0;
-  int offset = starting_ops/(thread_args->num_threads)*my_num;
-  int error_count = 0;
-
-  if (!bench_cond || !bench_mutex) {
-    kp_die("got a null argument: bench_cond=%p, bench_mutex=%p\n",
-        bench_cond, bench_mutex);
-  }
-
-  /* Use the lock to start things off */
-  rc = pthread_mutex_lock(bench_mutex);
-  if (rc != 0) {
-    kp_die("pthread_mutex_lock() returned error %d\n", rc);
-  }
-  trans = generic_trans_start(worker); //This doesn't need to be locked...
-  rc = pthread_mutex_unlock(bench_mutex);
-  if(rc != 0){
-    kp_die("pthread_mutex_unlock() returned error %d\n", rc);
-  }
-
-
-  for(i = 0; i < max_kv_size; i ++) {
-    if (ops_remaining <= 0) {
-      break;
-    }
-    i = starting_ops - ops_remaining;
-    ops_remaining--;
-
-    /* Do work */
-    if(thread_args->slam_local){
-      char *key;
-      fetch_key_from_index(0, (void **)&key);
-      rc = random_on_single_key(worker, trans, i, key, ints);
-    }
-    else if(thread_args->split_keys){
-      rc = random_on_partitioned_keys(worker, trans, i, 
-                                      offset, &key_count, ints);
-    }
-    else{
-      rc = create_random_request(worker, trans, i, ints, 0);
-    }
-    if (rc == -1) {
-      error_count++;
-      continue;
-    }else if (rc == 0 || rc == 1) {
-      num_puts++;
-      trans_merged = false;
-    }
-    my_completed_ops++;
-
-    /* Merge every once in a while: */
-    if ((num_puts % merge_every) == 0 \
-        && (!trans_merged)) {
-      ret = generic_trans_end(worker, trans);
-      if (ret)
-        conflicts++;
-      commits++;
-      trans_merged = true;
-      trans = generic_trans_start(worker);
-    }
-  }
-
-  /* Finish up by merging in things*/
-  if(! trans_merged) {
-    ret = generic_trans_end(worker, trans);
-    if (ret)
-      conflicts++;
-    commits++;
-  }
-
-  rc = pthread_mutex_lock(bench_mutex); /* lock again in case we need to sig*/
-  if(rc != 0){
-    kp_die("pthread_mutex_lock() returned error %d\n", rc);
-  }
-
-  threads_working--;
-  rc = pthread_cond_signal(bench_cond);
-  if(rc != 0){
-    kp_die("pthread_cond_signal() returned error %d\n", rc);
-  }
-
-  rc = pthread_mutex_unlock(bench_mutex);
-  if(rc != 0){
-    kp_die("pthread_mutex_unlock() returned error %d\n", rc);
-  }
-
-  /* Destroy (or fake-destroy) a worker */
-  generic_worker_destroy(worker);
-
-  thpt_numputs = thpt_numputs +  num_puts;
-  thpt_numgets = thpt_numgets + (my_completed_ops - num_puts);
-  thpt_numops = thpt_numops + my_completed_ops;
-  total_conflicts = total_conflicts + conflicts;
-  total_commits = total_commits + commits;
-  total_error_count = total_error_count + error_count;
-
-  //  printf("\t Conflicts in worker thread: %d (of %d commits)\n",
-  //      conflicts, commits);
-  //  printf("\t Errors in worker thread: %d (of %d ops)\n",
-  //      error_count, my_completed_ops);
-    //TODO: return this value to main thread, have it total the conflicts
-    //  from all workers.
-
-  /* cleanup and return */
-  ret_string = malloc(RET_STRING_LEN);
-  if (!ret_string)
-    kp_die("malloc(ret_string) failed\n");
-  snprintf(ret_string, RET_STRING_LEN, "success_%lu", tid);
-  if(K_DEBUG)
-    printf("thread %lu returning string=%s\n", tid, ret_string);
-  return (void *) ret_string;
-}
-
-
-void fixed_generic_benchmark(int num_threads, char *bench_string,
-                             bool slam_local, bool split_keys,
-                             bool measurement_thread){
-  int rc, i = 0;
-  void *ret_thread;
-  int cpu;
-  pthread_attr_t attr;
-  pthread_t threads[MAX_THREADS];
-  benchmark_thread_args thread_args[MAX_THREADS];
-  pthread_cond_t *bench_cond;
-  pthread_mutex_t *bench_mutex;
-
-  /* Check args */
-  if(num_threads <= 0){
-    kp_die("invalid num_threads=%d\n", num_threads);
-  }
-  kp_debug("pid=%d, num_threads=%d\n", getpid(), num_threads);
-
-
-  /* Create the master and one local worker*/
-  void * master = generic_store_create(num_threads);
- 
-  /* Allocate the mutex and condition variable. kp_mutex_create() is just
-   * a helper function that uses default attributes. */
-  rc = kp_mutex_create("bench_mutex", &bench_mutex);
-  if (rc != 0 || !bench_mutex) {
-    kp_die("kp_mutex_create() failed\n");
-  }
-  bench_cond = (pthread_cond_t *)malloc(sizeof(pthread_cond_t));
-  if (!bench_cond) {
-    kp_die("malloc(pthread_cond_t) failed\n");
-  }
-  rc = pthread_cond_init(bench_cond, NULL);  //default attributes
-  if (rc != 0) {
-    kp_die("pthread_cond_init() failed\n");
-  }
-
-  /* sieze the lock so none of the threads can start */
-  rc = pthread_mutex_lock(bench_mutex);
-  if(rc != 0){
-    kp_die("pthread_mutex_lock() returned error %d\n", rc);
-  }
-
-   /* Pre-allocate random numbers for each thread, _before_ starting any
-   * of them: */
-  for (i = 0; i < num_threads; i++) {
-    rc = random_ints_create(&(thread_args[i].ints), random_int_count);
-    if (rc != 0) {
-      kp_error("random_ints_create() failed\n");
-      return;
-    }
-  }
-
-  /* Pre populate the store before starting any thread */
-  void *worker = generic_worker_create(master);
-  int key_num = 0;
-  void *value = NULL;
-  char *key = NULL;
-  void *trans = NULL;
-  num_keys = 0;
-  trans = generic_trans_start(worker);
-  for (i = 0; i < PREPOP_NUM; i++){
-    key_num = i;
-    num_keys++;
-    fetch_key_from_index(key_num, (void **) &key);
-    eval_debug("WORKER: picked new key=%d (of %d so far) for put-insert; "
-               "merge_every=%d\n", key_num, num_keys, merge_every);
-
-    if(K_DEBUG)
-      printf("DEBUG: \tkey is %s...\n", key); 
-
-    /* pick a value */
-    fetch_value_from_index(key_num, &value);
-    if(K_DEBUG)
-      printf("DEBUG: \tvalue is %s...\n", (char*) value);
-    
-    /* Set its value: */
-    rc = generic_put(worker, trans, key, value, value_size+1);
-  }
-  rc = generic_trans_end(worker, trans);
-  generic_worker_destroy(worker);
-
- /* Create a single thread */
-  for (i=0; i < num_threads; i++){
-    /* Create attributes */
-    rc = pthread_attr_init(&attr);
-    if(rc != 0)
-      kp_die("pthread_attr_init() returned error=%d\n", rc);
-    
-    /* Set CPU and affinity */
-    cpu = CPU_OFFSET + (i % NUM_CPUS);
-    CPU_ZERO(&(thread_args[i]).cpu_set);
-    CPU_SET(cpu, &(thread_args[i]).cpu_set);
-    rc = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t),
-                                     &((thread_args[i]).cpu_set));
-    if(rc != 0)
-      kp_die("pthread_attr_setaffinity_np() returned error=%d\n", rc);
-    #ifdef PRINT_CPUS
-    kp_print("pinned new thread to CPU=0x%X\n", cpu);
-    #endif
-
-    /* Set the arguments and spawn */
-    thread_args[i].my_id = i;
-    thread_args[i].slam_local = slam_local;
-    thread_args[i].split_keys = split_keys;
-    thread_args[i].master = master;
-    thread_args[i].num_threads = num_threads;
-    thread_args[i].starting_ops = BENCH_EXTEND*iterations;
-    thread_args[i].bench_mutex = bench_mutex;
-    thread_args[i].bench_cond = bench_cond;
-
-    if(measurement_thread && i - num_threads -1)
-      rc = pthread_create(&threads[i], &attr, &measurement_thread_entrypoint, 
-                          (void *)(&(thread_args[i])));
-    else{
-      rc = pthread_create(&threads[i], &attr, &fixed_benchmark_entrypoint, 
-                          (void *)(&(thread_args[i])));
-    }
-    if(rc != 0) {
-      if (rc == 22) {
-        kp_error("pthread_create() returned error=%d: check that NUM_CPUS "
-            "(%d) is not greater than number of physical cores!\n",rc,NUM_CPUS);
-      }
-      kp_die("pthread_create() returned error=%d\n", rc);
-    }
-    
-    /* Destroy the attributes */
-    rc = pthread_attr_destroy(&attr);
-    if(rc != 0)
-      kp_die("pthread_attr_destroy() returned error=%d\n", rc);
-  }
-
-  /*=============== MASTER ACTIONS ==================== */
-  
-  /* Set the ops for threads */
-  if(measurement_thread)
-    threads_working = num_threads -1;
-  else
-    threads_working = num_threads;
-  ops_remaining = BENCH_EXTEND*iterations;
-  reset_thpt();
-
-  /* Set timing */
-  struct timeval *start = malloc(sizeof(struct timeval));
-  if (!start)
-    kp_die("malloc(start) failed\n");
-  struct timeval *end = malloc(sizeof(struct timeval));
-  if (!end)
-    kp_die("malloc(end) failed\n");
-
-  gettimeofday(start, NULL);
-
-  /* wait for signal*/
-  while (threads_working > 0) {
-    rc = pthread_cond_wait(bench_cond, bench_mutex);
-    if(rc != 0){
-      kp_die("pthread_cond_wait() returned error %d\n", rc);
-    }
-  }
-
-  gettimeofday(end, NULL);
-
-  int usec, sec, time_usec;
-  /* Figure out timing */
-  sec = end->tv_sec - start->tv_sec;
-  usec = end->tv_usec - start->tv_usec;
-  if(end->tv_usec < start->tv_usec){
-    sec --;
-    usec += 1000000;
-  }
-  time_usec = 1000000*sec+usec;
-  total_usecs = time_usec;
-
-  /* Print results */
-  printf("For Fixed %s Benchmark (random+latency):"
-         "\n\t benchmark cost %d:%d (sec:usec)"
-         "= %d usecs \n",
-         bench_string, sec, usec, time_usec);
-  printf("\tAt a r-w-u proportion of %.2f-%.2f-%.2f...\n",
-         (1-put_probability)*100,
-         (put_probability * (1-update_probability))*100,
-         (put_probability * update_probability)*100);
-
-  printf("\t %d total ops (%d puts + %d gets)\n"
-         "\t %d in runtime (usecs) = %f ops/usec\n" 
-         "\t %f byte/sec put throughput (this thread)\n" 
-         "\t %f byte/sec get throughput (this thread)\n"
-         "\t %f byte/sec total throughput (this thread)\n"
-         "\t Conflicts in worker thread: %d (of %d commits)\n"
-         "\t Errors in worker thread: %d\n",
-         thpt_numops, thpt_numputs, thpt_numgets,
-         total_usecs, (float)thpt_numops/(float)total_usecs,
-         1000000*(float)thpt_numputs/(float)total_usecs*value_size,
-         1000000*(float)thpt_numgets/(float)total_usecs*value_size,
-         1000000*((float)thpt_numops/(float)total_usecs)*value_size,
-         total_conflicts, total_commits,total_error_count);
-  rc = pthread_mutex_unlock(bench_mutex);
-  if(rc != 0){
-    kp_die("pthread_mutex_unlock() returned error %d\n", rc);
-  }
-  /* Get that worker back! */
-  for( i = 0; i < num_threads-1; i++){
-    rc = pthread_join(threads[i], &ret_thread);
-    if(rc != 0)
-      kp_die("pthread_join() returned error=%d\n", rc);
-    if(ret_thread)
-      free(ret_thread);
-    ret_thread = NULL;
-  }
-
-
-  /* Cleanup */
-  generic_store_destroy(master);
-  for (i = 0; i < num_threads; i++) {
-    random_ints_destroy(thread_args[i].ints);
-  }
-
-  reset_counts();
-
-  return;
-
-
-}
-
-
-void fixed_global_benchmark(int num_threads){
-  fixed_generic_benchmark(num_threads, "split_keys", false, true, false);
-}
-
-void fixed_with_measurement_thread(int num_threads){
-  fixed_generic_benchmark(num_threads, "split_keys", false, true, true);
-}
-
-
-void fixed_local_benchmark(int num_threads){
-  fixed_generic_benchmark(num_threads, "single_key", true, false, false);
-}
-
-
-void fixed_read_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = .05;
-  update_probability = .7;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "read-heavy", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
-void fixed_write_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = .15;
-  update_probability = .125;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "write-heavy", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
-void fixed_update_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = .15;
-  update_probability = .875;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "update-heavy", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
-void fixed_zero_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = 1.00;
-  update_probability = .7;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "zero-percent", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
-void fixed_twenty_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = .80;
-  update_probability = .7;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "twenty-percent", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
-void fixed_forty_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = .60;
-  update_probability = .7;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "forty-percent", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
-void fixed_sixty_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = .40;
-  update_probability = .7;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "sixty-percent", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
-void fixed_eighty_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = .20;
-  update_probability = .7;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "eighty-percent", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-
-}
-void fixed_hundred_benchmark(int num_threads){
-  /* set probs */
-  float save1 = put_probability;
-  float save2 = update_probability;
-  put_probability = 0.0;
-  update_probability = .7;
-
-  /* run benchmark */
-  fixed_generic_benchmark(num_threads, "hundred-percent", false, false, false);
-  put_probability = save1;
-  update_probability = save2;
-}
 
 /* Packages up single threaded evaluations so we can use it from within
    a single worker setup */
@@ -2444,58 +1937,6 @@ void *little_latency_wrapper(void *arg){
   return (void *) ret_string;
 }
 
-void *little_cache_wrapper(void *arg){
-  char *ret_string;
-  unsigned long tid;
-  benchmark_thread_args *thread_args;
-  void *master;
-  void *worker;
-
-  /* setup thread */
-  tid = pthread_self();
-  thread_args = (benchmark_thread_args *) arg;
-  master = thread_args->master;
-  worker = generic_worker_create(master);
-
-  int key_num = 0;
-  int retval, i, j;
-  void * value = NULL;
-  char * key = NULL;
-  void * trans = NULL;
-
-  /* Prepopulate */
-  num_keys = 0;
-  trans = generic_trans_start(worker);
-  for(i = 0; i < MULT_FACTOR; i++){
-    for(j = 0; j < iterations; j++){
-      key_num = i*iterations+j;
-      num_keys++;
-      fetch_key_from_index(key_num, (void**) &key);
-      fetch_value_from_index(key_num, &value);
-      retval = generic_put(worker, trans, key, value, value_size+1);
-      if(retval == 0)
-        retval = 0;
-      else
-        retval = -1;
-    }
-  }
-  retval = generic_trans_end(worker, trans);
-
-  /* Do special, randomized get eval */
-  retval = individual_function_eval(PREPOP_NUM, 1, worker, &trans,
-                                    GETME, "get", 100, merge_every, true);
-  generic_worker_destroy(worker);
-  reset_counts();
-
-  /* cleanup and return */
-  ret_string = malloc(RET_STRING_LEN);
-  if (!ret_string)
-    kp_die("malloc(ret_string) failed\n");
-  snprintf(ret_string, RET_STRING_LEN, "success_%lu", tid);
-  if(K_DEBUG)
-    printf("thread %lu returning string=%s\n", tid, ret_string);
-  return (void *) ret_string;
-}
 
 void *little_split_latency_wrapper(void *arg){
   char *ret_string;
@@ -2525,199 +1966,6 @@ void *little_split_latency_wrapper(void *arg){
   return (void *) ret_string;
 }
 
-void *little_workload_wrapper(void *arg){
-  char *ret_string;
-  unsigned long tid;
-  benchmark_thread_args *thread_args;
-  void *master;
-  void *worker;
-  random_ints *ints;
-
-  /* setup thread */
-  tid = pthread_self();
-  thread_args = (benchmark_thread_args *) arg;
-  master = thread_args->master;
-  ints = thread_args->ints;
-
-  /* Do work */
-  worker = generic_worker_create(master);
-  workload_evaluation(iterations, worker, ints);
-  generic_worker_destroy(worker);
-  reset_counts();
-
-  /* cleanup and return */
-  ret_string = malloc(RET_STRING_LEN);
-  if (!ret_string)
-    kp_die("malloc(ret_string) failed\n");
-  snprintf(ret_string, RET_STRING_LEN, "success_%lu", tid);
-  if(K_DEBUG)
-    printf("thread %lu returning string=%s\n", tid, ret_string);
-  return (void *) ret_string;
-}
-
-void *little_kvsize_wrapper(void *arg){
-  char *ret_string;
-  unsigned long tid;
-  benchmark_thread_args *thread_args;
-  void *master;
-  void *worker;
-
-  /* setup thread */
-  tid = pthread_self();
-  thread_args = (benchmark_thread_args *) arg;
-  master = thread_args->master;
-
-  /* Do work */
-  worker = generic_worker_create(master);
-  local_keyvalue_size(iterations, worker);
-  generic_worker_destroy(worker);
-  reset_counts();
-
-  /* cleanup and return */
-  ret_string = malloc(RET_STRING_LEN);
-  if (!ret_string)
-    kp_die("malloc(ret_string) failed\n");
-  snprintf(ret_string, RET_STRING_LEN, "success_%lu", tid);
-  if(K_DEBUG)
-    printf("thread %lu returning string=%s\n", tid, ret_string);
-  return (void *) ret_string;
-}
-
-void single_worker_test(void){
-  int rc, i = 0;
-  void *ret_thread;
-  int cpu;
-  pthread_attr_t attr;
-  pthread_t thread;
-  benchmark_thread_args thread_args;
-  void *master;
-  random_ints *ints;
-  
-  /* Setup for everybody: don't spawn yet */
-  /* Set CPU */
-  cpu = CPU_OFFSET + (i % NUM_CPUS);
-  CPU_ZERO(&(thread_args.cpu_set));
-  CPU_SET(cpu, &(thread_args.cpu_set));
-
-  /* Create Attributes */
-  rc = pthread_attr_init(&attr);
-  if(rc != 0)
-    kp_die("pthread_attr_init() returned error=%d\n", rc);
-
-  /* Set affinity */
-  rc = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t),
-                                   &(thread_args.cpu_set));
-  if(rc != 0)
-    kp_die("pthread_attr_setaffinity_np() returned error=%d\n", rc);
-#ifdef PRINT_CPUS
-  kp_print("pinned new thread to CPU=0x%X\n", cpu);
-#endif
-
-  printf("\n*** BEGINING SINGLE THREADED TESTS***\n\n");
-  /*========================================= */
-  /* Create the master for latency and memcpy*/
-  master = generic_store_create(1);  //1 = num_threads
-  thread_args.master = master;
-  rc = random_ints_create(&ints, random_int_count);
-  if (rc != 0) {
-    kp_error("random_ints_create() failed\n");
-    return;
-  }
-  thread_args.ints = ints;
-
-  /* Spawn the thread */
-  rc = pthread_create(&thread, &attr, &little_latency_wrapper,
-                      (void *)(&thread_args));
-  if(rc != 0)
-    kp_die("pthread_create() returned error=%d\n", rc);
-
-  /* Get that worker back and cleanup! */
-  rc = pthread_join(thread, &ret_thread);
-  if(rc != 0)
-    kp_die("pthread_join() returned error=%d\n", rc);
-  if(ret_thread)
-    free(ret_thread);
-  ret_thread = NULL;
-  generic_store_destroy(master);
-
-  /*========================================= */
-#if 0
-  /* Create the master for workload*/
-  master = generic_store_create(1);  //1 = num_threads
-  thread_args.master = master;
-
-  /* Spawn the thread */
-  rc = pthread_create(&thread, &attr, &little_workload_wrapper, 
-                      (void *)(&thread_args));
-  if(rc != 0)
-    kp_die("pthread_create() returned error=%d\n", rc);
-
-  /* Get that worker back and cleanup! */
-  rc = pthread_join(thread, &ret_thread);
-  if(rc != 0)
-    kp_die("pthread_join() returned error=%d\n", rc);
-  if(ret_thread)
-    free(ret_thread);
-  ret_thread = NULL;
-  generic_store_destroy(master);
-#endif
-  /*========================================= */
-#if 0
-  /* Create the master for keyvalue size*/
-  master = generic_store_create(1);  //1 = num_threads
-  thread_args.master = master;
-
-  /* Spawn the thread */
-  rc = pthread_create(&thread, &attr, &little_kvsize_wrapper,
-                      (void *)(&thread_args));
-  if(rc != 0)
-    kp_die("pthread_create() returned error=%d\n", rc);
-
-  /* Get that worker back and cleanup! */
-  rc = pthread_join(thread, &ret_thread);
-  if(rc != 0)
-    kp_die("pthread_join() returned error=%d\n", rc);
-  if(ret_thread)
-    free(ret_thread);
-  ret_thread = NULL;
-  generic_store_destroy(master);
-#endif
-  /*========================================= */
-  if(push_out_of_cache){
-    printf("\n*** ATTEMPTING TO BUMP OUT OF CACHE***\n\n");
-    /* Create the master for latency and memcpy*/
-    master = generic_store_create(1);
-    thread_args.master = master;
-    rc = random_ints_create(&ints, random_int_count);
-    if (rc != 0) {
-      kp_error("random_ints_create() failed\n");
-    return;
-    }
-    thread_args.ints = ints;
-    
-    /* Spawn the thread */
-    rc = pthread_create(&thread, &attr, &little_cache_wrapper,
-                        (void *)(&thread_args));
-    if(rc != 0)
-      kp_die("pthread_create() returned error=%d\n", rc);
-    
-  /* Get that worker back and cleanup! */
-    rc = pthread_join(thread, &ret_thread);
-    if(rc != 0)
-      kp_die("pthread_join() returned error=%d\n", rc);
-    if(ret_thread)
-      free(ret_thread);
-    ret_thread = NULL;
-    generic_store_destroy(master);
-  }
-  /*========================================= */
-  printf("\n*** CONCLUDING SINGLE THREADED TESTS***\n\n");
-
-  rc = pthread_attr_destroy(&attr);
-  if(rc != 0)
-    kp_die("pthread_attr_destroy() returned error=%d\n", rc);
-  return;
-}
 
 void base_number_test(void){
   int rc, i = 0;
@@ -2817,7 +2065,7 @@ void usage(char *progname)
 {
   printf("USAGE: %s [--pause] [--delay=<secs>] [--kpvm-dram] "
          "[--base] [--cache] <cpus> <iters> <ksize> <vsize> "
-         "<merge_every> <put_prob> <update_prob> <threads> \n", progname);
+         "<merge_every> <put_prob> <update_prob> <operations> <threads> \n", progname);
   printf("  If --pause is used, the evaluation will pause after the initial\n");
   printf("    key and value setup and wait for the user to press Enter.\n");
   printf("  --delay will delay the evaluation start by the number of seconds\n");
@@ -2935,7 +2183,7 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
    * There should be 9 arguments remaining in argv:
    */
   kp_debug("after option processing, optind=%d, argc=%d\n", optind, argc);
-  if (argc - optind != 8) {
+  if (argc - optind != 9) {
     kp_error("wrong number of arguments\n");
     usage(argv[0]);
   }
@@ -2948,13 +2196,14 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
   /* TODO add capability to alter these: */
   put_probability = atoi(argv[optind+5]);//5 (optind+5)
   update_probability = .7;               //6 (optind+6)
-  *num_threads = atoi(argv[optind+7]);   //7
+  operations = atoi(argv[optind+7]);       //1
+  *num_threads = atoi(argv[optind+8]);   //7
 
   kp_debug("got arguments: CPUS=%d,iterations=%d, key_size=%d, value_size=%d, "
            "merge_every=%d, put_probability=%f, update_probability=%f, "
-           "num_threads=%d\n", NUM_CPUS,
+           "num_threads=%d operations=%d\n", NUM_CPUS,
            iterations, key_size, value_size, merge_every, put_probability,
-           update_probability, *num_threads);
+           update_probability, *num_threads, operations);
 
   /* Validity checking: */
   if (NUM_CPUS < 1) {

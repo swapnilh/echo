@@ -147,4 +147,4 @@ kp_kvstore-shared: $(LIBOBJ)
 
 #################################################
 clean: 
-	rm -f $(ODIR)/*.o $(ODIR)/*.a *~ core $(INCDIR)/*~ $(SHAREDLIBNAME) $(STATICLIBNAME) $(LDIR)/$(SHAREDLIBNAME) $(LDIR)/$(STATICLIBNAME) dummytest evaluation/evaluation telescope telescope2 test_local_master gmon.out test_flush test_flush2 test_recovery $(LDIR)/*.so* test_cas
+	rm -f $(ODIR)/*.o $(ODIR)/*.a *~ core $(INCDIR)/*~ $(SHAREDLIBNAME) $(STATICLIBNAME) $(LDIR)/$(SHAREDLIBNAME) $(LDIR)/$(STATICLIBNAME) dummytest evaluation/*.o evaluation/evaluation telescope telescope2 test_local_master gmon.out test_flush test_flush2 test_recovery $(LDIR)/*.so* test_cas
