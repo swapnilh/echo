@@ -1,0 +1,13 @@
+prefix=/afs/cs.wisc.edu/u/s/w/swapnilh/private/NVM_fall2015/gem5_new/gem5/workloads/echo-keyvalue2/echo/src/malloc
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: gperftools
+Version: 2.0
+Description: Performance tools for C++
+URL: http://code.google.com/p/gperftools/
+Requires:
+Libs: -L${libdir} -lprofiler
+Libs.private: -pthread -lpthread
+Cflags: -I${includedir}
