@@ -34,7 +34,7 @@
 /* Define this variable to enable flushing; leave it undefined to turn
  * the functions in kp_recovery.c into no-ops.
  */
-//#define FLUSH_IT
+#define FLUSH_IT
 //#define R_DEBUG
 //#define R_ASSERT
 
