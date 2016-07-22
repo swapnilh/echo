@@ -10,6 +10,7 @@
 
 #include "kp_recovery.h"
 #include <string.h>
+#include "../include/libpm.h"
 
 #if 0
 /* This is an internal helper function, for now.
@@ -77,7 +78,8 @@ void pcm_calloc(void **ptr, size_t size)
 	 * an mfence, and only then set the caller's pointer.
 	 *   Is this necessary? Way too expensive??
 	 */
-	*ptr = calloc(1, size);
+	*ptr = pmalloc(size);
+	//pmemalloc_activate(*ptr);
 	flush_range(*ptr, size);  //only has an effect if FLUSH_IT defined
 }
 

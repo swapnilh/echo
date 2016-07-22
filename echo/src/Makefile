@@ -11,11 +11,12 @@ INCL = -I$(VECTOR_DIR)/ -Ihash_table/ -Ithreadpool/ -I../include
 MALLOC_DIR	= ./malloc
 MALLOC_LIBS	= $(MALLOC_DIR)/lib
 
-CC 	= gcc
+CC 	= gcc -ggdb -O0
+XX = g++ -std=c++11 -ggdb -O0
 KPKVLIBS = -lkp_kvstore
 TCMALLOC_LIBS	= -ltcmalloc_minimal
 JEMALLOC_LIBS	= -ljemalloc
-CFLAGS 	= $(INCL) -D_GNU_SOURCE -g -Wall -fPIC -O3 
+CFLAGS 	= $(INCL) -D_GNU_SOURCE -Wall -fPIC -O0 
 #CFLAGS 	= $(INCL) -D_GNU_SOURCE -g -Wall -fPIC -O3 -Wextra -pedantic
   # -pg enables profiling with gprof(1)
   # -D_GNU_SOURCE is needed for CPU_SET macros in evaluation.c, and also
@@ -41,7 +42,7 @@ CFLAGS 	= $(INCL) -D_GNU_SOURCE -g -Wall -fPIC -O3
 # list but says that it can't find it, then source source-me.
 #   ldd leveldb/lib/libleveldb.so
 #   ldd evaluation
-LIBS	= -L$(LDIR) -L$(MALLOC_LIBS) -lpthread -lrt -lm $(TCMALLOC_LIBS) -I../../../util/m5 ../../../util/m5/m5op_x86.S
+LIBS	= -L$(LDIR) -L$(MALLOC_LIBS) -lpthread -lrt -lm $(TCMALLOC_LIBS)  -I../../../util/m5 ../../../util/m5/m5op_x86.S
   # -lrt is for scheduler/timing stuff in evaluation.c
 
 # To use tcmalloc with Cassandra, we can use the less-recommended technique
@@ -80,7 +81,7 @@ $(ODIR)/queue.o: threadpool/queue.c threadpool/queue.h threadpool/threadpool_mac
 $(ODIR)/threadpool.o: threadpool/threadpool.c threadpool/threadpool.h threadpool/threadpool_macros.h kp_recovery.h kp_common.h
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-_OBJ 	=  kp_kvstore.o kp_kv_local.o kp_kv_master.o vector.o vector64.o hash_table.o queue.o threadpool.o kp_recovery.o kp_common.o 
+_OBJ 	=  kp_kvstore.o kp_kv_local.o kp_kv_master.o vector.o vector64.o hash_table.o queue.o threadpool.o kp_recovery.o kp_common.o clibpm.o
 OBJ 	= $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 # This test file is old and probably not worth using anymore:
@@ -103,10 +104,12 @@ jemalloc:
 _EVOBJ	= $(_OBJ) evaluation/evaluation.o 
 EVOBJ 	= $(patsubst %,$(ODIR)/%,$(_EVOBJ))
 
-evaluation: kp_kvstore-shared evaluation/evaluation.o 
+evaluation: kp_kvstore-static evaluation/evaluation.o clibpm.o
 	$(CC) -o evaluation/evaluation evaluation/evaluation.o  $(CFLAGS) $(LIBS)  $(KPKVLIBS)
 evaluation-shared: kp_kvstore-shared evaluation/evaluation.o 
 	$(CC) -o evaluation/evaluation evaluation/evaluation.o $(CFLAGS) $(LIBS) $(KPKVLIBS)
+#clibpm.o: clibpm.c
+#	$(XX)  -c clibpm.c $(CFLAGS) $(LIBS)
 
 
 #################################################
@@ -134,8 +137,8 @@ _LIBOBJ 	= $(_OBJ)
 LIBOBJ 	= $(patsubst %,$(ODIR)/%,$(_LIBOBJ))
 
 # http://www.adp-gmbh.ch/cpp/gcc/create_lib.html
-kp_kvstore-static: $(LIBOBJ)
-	ar rcs $(ODIR)/$(STATICLIBNAME) $(LIBOBJ)
+kp_kvstore-static: $(LIBOBJ) 
+	ar rcs $(ODIR)/$(STATICLIBNAME) $(LIBOBJ) 
 	cp $(ODIR)/$(STATICLIBNAME) $(LDIR)
 
 kp_kvstore-shared: $(LIBOBJ)
@@ -147,4 +150,4 @@ kp_kvstore-shared: $(LIBOBJ)
 
 #################################################
 clean: 
-	rm -f $(ODIR)/*.o $(ODIR)/*.a *~ core $(INCDIR)/*~ $(SHAREDLIBNAME) $(STATICLIBNAME) $(LDIR)/$(SHAREDLIBNAME) $(LDIR)/$(STATICLIBNAME) dummytest evaluation/*.o evaluation/evaluation telescope telescope2 test_local_master gmon.out test_flush test_flush2 test_recovery $(LDIR)/*.so* test_cas
+	rm -f $(ODIR)/*.o $(ODIR)/*.a *~ core $(INCDIR)/*~ $(SHAREDLIBNAME) $(STATICLIBNAME) $(LDIR)/$(SHAREDLIBNAME) $(LDIR)/$(STATICLIBNAME) dummytest evaluation/*.o evaluation/evaluation telescope telescope2 test_local_master gmon.out test_flush test_flush2 test_recovery $(LDIR)/*.so* test_cas clibpm.o

@@ -25,6 +25,10 @@
 #include "../kp_common.h"
 #include "../include/kp_kv_local.h"
 #include "../include/kp_kv_master.h"
+#include "../include/libpm.h"
+
+
+void *pmemalloc_init(const char *path, size_t size);
 
 bool do_conflict_detection = true;
 bool use_durable_ldb = true;
@@ -2231,6 +2235,13 @@ int main(int argc, char *argv[]){
   bool base = false;
   int delay = 0;
   push_out_of_cache = false;
+
+  const char* path = "/dev/shm/efile";
+  void *pmp;
+  if ((pmp = pmemalloc_init(path, (size_t)PMSIZE)) == NULL) {
+    printf("Unable to allocate memory pool\n");
+    exit(0);
+  }
 
   srandom(time(NULL));
 
