@@ -42,7 +42,7 @@ CFLAGS 	= $(INCL) -D_GNU_SOURCE -Wall -fPIC -O0
 # list but says that it can't find it, then source source-me.
 #   ldd leveldb/lib/libleveldb.so
 #   ldd evaluation
-LIBS	= -L$(LDIR) -L$(MALLOC_LIBS) -lpthread -lrt -lm $(TCMALLOC_LIBS)  -I../../../util/m5 ../../../util/m5/m5op_x86.S
+LIBS	= -L$(LDIR) -L$(MALLOC_LIBS) -lpthread -lrt -lm $(TCMALLOC_LIBS) # -I../include/m5 ../include/m5/m5op_x86.S
   # -lrt is for scheduler/timing stuff in evaluation.c
 
 # To use tcmalloc with Cassandra, we can use the less-recommended technique
