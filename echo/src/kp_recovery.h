@@ -133,7 +133,7 @@ void kp_kpalloc(void **ptr, size_t size, bool use_nvm);
  * NOTE: currently, this function does NOT zero-allocate the new memory
  * region at all, nor does it flush it. The caller should do these things
  * if they are necessary. */
-void kp_realloc(void **ptr, size_t new_size, bool use_nvm);
+void kp_realloc(void **ptr, size_t new_size, size_t old_size, bool use_nvm);
 
 /* Copies n bytes of memory from src to dest. If use_nvm is true, then
  * this function will also flush the memory range that was copied to

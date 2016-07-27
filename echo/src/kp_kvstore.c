@@ -7140,8 +7140,10 @@ int kp_merge_commit_record(kp_kvstore *kv, kp_commit_record *cr,
 			 */
 #ifdef KP_ASSERT
 			if (pair->use_nvm != kv->use_nvm) {
-				kp_die("pair->use_nvm (%s) does not match master's use_nvm!\n",
-						pair->use_nvm ? "true" : "false");
+//				kp_die("pair->use_nvm (%s) does not match master's use_nvm(%s)!\n",
+//						pair->use_nvm ? "true" : "false", kv->use_nvm ? "true" : "false");
+				kp_die("pair->use_nvm (%d) does not match master's use_nvm(%d)!\n",
+						pair->use_nvm , kv->use_nvm );
 			}
 			if ((!pair->value && pair->size != 0) ||
 			    ( pair->value && pair->size == 0)) {

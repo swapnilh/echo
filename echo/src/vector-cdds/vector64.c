@@ -182,7 +182,7 @@ static int vector64_resize_up(vector64 *v)
 	 *   happens to allocate v->array and v->size in two different cache
 	 *   lines. Oh well...
 	 */
-	kp_realloc((void **)&(v->array), sizeof(unsigned long) * new_size,
+	kp_realloc((void **)&(v->array), sizeof(unsigned long) * new_size, sizeof(unsigned long) * v->size,
 			v->use_nvm);
 	v->size = new_size;
 	kp_flush_range(&(v->array), flush_size, v->use_nvm);  //flush both array and size!
@@ -583,8 +583,9 @@ unsigned long vector64_delete(vector64 *v, unsigned long idx)
 		 * then finally flush them both to memory (if use_nvm is true). See
 		 * the notes in vector_append() for this. */
 		/* Leak window begin: */
+		size_t old_size = v->size;
 		v->size /= VECTOR64_RESIZE_FACTOR;  //inverse of vector_append()
-		kp_realloc((void **)&(v->array), sizeof(unsigned long) * v->size,
+		kp_realloc((void **)&(v->array), sizeof(unsigned long) * v->size, sizeof(unsigned long) * old_size,
 				v->use_nvm);
 		kp_flush_range(&(v->array), flush_size, v->use_nvm);
 		/* Leak window end. If we fail after the flush has returned, then

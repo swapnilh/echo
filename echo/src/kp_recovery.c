@@ -153,15 +153,22 @@ void kp_kpalloc(void **ptr, size_t size, bool use_nvm)
 	}
 }
 
-void kp_realloc(void **ptr, size_t new_size, bool use_nvm)
+void kp_realloc(void **ptr, size_t new_size, size_t old_size, bool use_nvm)
 {
+	void *oldptr = *ptr;
 	/* See where this is used for resizing in vector.c: we don't need to
 	 * flush the new memory region here or zero-allocate it, because the
 	 * vector uses its size rather than the contents of the memory to know
 	 * what's there. */
-	r_debug("ignoring use_nvm=%s for kp_realloc(); caller (vector object) "
+	DEBUG("ignoring use_nvm=%s for kp_realloc(); caller (vector object) "
 			"should flush as necessary!\n", use_nvm ? "true" : "false");
-	*ptr = realloc(*ptr, new_size);
+	if(use_nvm){
+		*ptr = pmalloc(new_size);
+	    kp_memcpy(*ptr, oldptr, old_size, use_nvm);	
+	}
+	else{
+		*ptr = realloc(*ptr, new_size);
+	}
 }
 
 void kp_memcpy(void *dest, const void *src, size_t n, bool use_nvm)

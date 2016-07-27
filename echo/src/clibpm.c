@@ -7,6 +7,10 @@ pthread_mutex_t pmp_mutex;
 
 void* pmalloc(size_t sz) {
   pthread_mutex_lock(&pmp_mutex);
+/*  if(sz==32){ //32 is the size of vector, and vectors can be appended, so we need to reserve extra space 
+      // to avoid the need for realloc
+      sz=100*32; 
+  }*/
   void* ret = pmemalloc_reserve(sz);
   pthread_mutex_unlock(&pmp_mutex);
   return ret;
@@ -245,7 +249,6 @@ static void pmemalloc_coalesce(void* pmp) {
 
 // pmemalloc_init -- setup a Persistent Memory pool for use
 void *pmemalloc_init(const char *path, size_t size) {
-  void *pmp;
   int err;
   int fd = -1;
   struct stat stbuf;
@@ -300,9 +303,10 @@ void *pmemalloc_init(const char *path, size_t size) {
      * create the first clump to cover the entire pool
      */
     cl.size = lastclumpoff - PMEM_CLUMP_OFFSET;
-    if (pwrite(fd, &cl, sizeof(cl), PMEM_CLUMP_OFFSET) < 0)
-      goto out; DEBUG("[0x%lx] created clump, size 0x%lx", PMEM_CLUMP_OFFSET, cl.size);
-
+    if (pwrite(fd, &cl, sizeof(cl), PMEM_CLUMP_OFFSET) < 0){
+        DEBUG("[0x%lx] created clump, size 0x%lx", PMEM_CLUMP_OFFSET, cl.size);
+        goto out;
+    }
     /*
      * write the pool header
      */
@@ -380,16 +384,17 @@ void *pmemalloc_reserve(size_t size) {
 
   if (prev_clp != NULL) {
     clp = prev_clp;
+//    printf("prev_clp=%p\n", prev_clp);
   } else {
     clp = (struct clump *)ABS_PTR((struct clump *) PMEM_CLUMP_OFFSET);
   }
 
-  DEBUG("clp= %p", clp);
+  DEBUG("pmp=%p clp= %p, size of clp=%d size of struct clump =%d", pmp, clp, sizeof(clp), sizeof(struct clump));
 
   /* first fit */
   check:  //unsigned int itr = 0;
   while (clp->size) {
-    DEBUG("************** itr :: %lu ", itr++);
+//    DEBUG("************** itr :: %lu ", itr++);
     size_t sz = clp->size & ~PMEM_STATE_MASK;
     int state = clp->size & PMEM_STATE_MASK;
     DEBUG("size : %lu state : %d", sz, state);
@@ -461,7 +466,7 @@ void *pmemalloc_reserve(size_t size) {
     clp = (struct clump *)ABS_PTR((struct clump *) PMEM_CLUMP_OFFSET);
     goto check;
   }
-
+    
   printf("no free memory of size %lu available \n", nsize);
   //display();
   errno = ENOMEM;

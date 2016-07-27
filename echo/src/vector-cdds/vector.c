@@ -69,6 +69,7 @@ int vector_create(vector **v, unsigned long long size, bool use_nvm)
 		return -1;
 	}
 	(*v)->size = init_size;
+//	printf("init_size=%d, sizeof(vector)=%d\n", init_size, sizeof(vector));
 	(*v)->count = 0;
 	(*v)->use_nvm = use_nvm;
 	
@@ -229,7 +230,7 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 		 *   Also note that we don't currently GUARANTEE this, if the compiler
 		 *   happens to allocate v->data and v->size in two different cache
 		 *   lines. */
-		kp_realloc((void **)&(v->data), sizeof(void*) * new_size, v->use_nvm);
+		kp_realloc((void **)&(v->data), sizeof(void*) * new_size, sizeof(void*) * v->size, v->use_nvm);
 		v->size = new_size;
 		kp_flush_range(&(v->data), flush_size, v->use_nvm);  //flush both data and size!
 		/* Leak window end. If we fail after the flush() has returned,
@@ -265,8 +266,10 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 	if (previous_tail) {  //super hacky
 		if (v->count > 0) {
 			*previous_tail = v->data[v->count - 1];
+			printf("3\n");
 		} else {
 			*previous_tail = NULL;
+			printf("4\n");
 		}
 		/* Don't need to flush; caller will do it... */
 	}
@@ -275,6 +278,7 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 	 * the first set + flush, there are no real effects. */
 	v->data[v->count] = (void *)e;
 	kp_flush_range(&(v->data[v->count]), sizeof(void *), v->use_nvm);
+
 	/* Do we need a memory fence right here? Only if we're flushing (so
 	 * the fence is already internal in kp_flush_range()); otherwise,
 	 * we're not concerned about anybody else seeing the count and the
@@ -410,7 +414,7 @@ uint64_t vector_insert(vector *v, const void *e, vector_comparator cmp)
 		 *   Also note that we don't currently GUARANTEE this, if the compiler
 		 *   happens to allocate v->data and v->size in two different cache
 		 *   lines. */
-		kp_realloc((void **)&(v->data), sizeof(void*) * new_size, v->use_nvm);
+		kp_realloc((void **)&(v->data), sizeof(void*) * new_size, sizeof(void*) * v->size, v->use_nvm);
 		v->size = new_size;
 		kp_flush_range(&(v->data), flush_size, v->use_nvm);  //flush both data and size!
 		/* Leak window end. If we fail after the flush() has returned,
@@ -606,8 +610,9 @@ int vector_delete(vector *v, unsigned long long idx, void **e)
 		 * then finally flush them both to memory (if use_nvm is true). See
 		 * the notes in vector_append() for this. */
 		/* Leak window begin: */
+		size_t old_size = v->size;
 		v->size /= VECTOR_RESIZE_FACTOR;  //inverse of vector_append()
-		kp_realloc((void **)&(v->data), sizeof(void*) * v->size, v->use_nvm);
+		kp_realloc((void **)&(v->data), sizeof(void*) * v->size, sizeof(void*) * old_size, v->use_nvm);
 		kp_flush_range(&(v->data), flush_size, v->use_nvm);
 		/* Leak window end. If we fail after the flush has returned, then
 		 * the next call to vector_delete() will skip the resizing step. */
