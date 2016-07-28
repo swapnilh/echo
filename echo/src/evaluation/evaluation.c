@@ -90,7 +90,6 @@ int NUM_CPUS=2;
 
 /* define this to debug the operations performed by the LATENCY and
  * WORKER threads: */
-#define EVAL_DEBUG
 #ifdef EVAL_DEBUG
 #define eval_debug(f, a...)  do { \
       fprintf(stdout, "%lu: %s: " f, pthread_self(), __func__, ##a); \
@@ -1615,7 +1614,7 @@ void *worker_thread_entrypoint(void *arg){
   trans = generic_trans_start(worker);
 //  while(measurement_in_progress){
   for (ops=0; ops < operations; ops++) {
-    printf("WORKER %d operation %d/%d\n", tid, ops, operations);
+    eval_debug("WORKER %d operation %d/%d\n", tid, ops, operations);
     if(total_ops == 0) { // first operation!
       kp_print("actually starting now\n");
       gettimeofday(start,NULL);
@@ -2331,14 +2330,14 @@ int main(int argc, char *argv[]){
   /* Do allocation/creation of random keys and values */
   if(! free_gotten_vals){
     kp_warn("Storing gotten values. Space-expensive\n");
-    dest_values = malloc(max_kv_size*sizeof(void*));
+    dest_values = malloc(max_kv_size*sizeof(void*)); // freud : should this be persistent ?
     if (!dest_values)
       kp_die("malloc(dest_values) failed\n");
   }
 
   if(use_random_values){
     kp_warn("Pre-creating values. Space-expensive\n");
-    temp_values = malloc(max_kv_size*sizeof(void*));
+    temp_values = malloc(max_kv_size*sizeof(void*)); // freud : should this be persistent ?
     if( !temp_values)
       kp_die("malloc(temp_values) failed\n");
     for(i = 0; i < max_kv_size; i++){

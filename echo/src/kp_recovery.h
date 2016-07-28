@@ -207,7 +207,7 @@ unsigned int flush_range(const void *addr, const size_t size);
 
 /* Just a convenience wrapper for a single memory fence: */
 #define kp_mfence() do {  \
-	asm volatile ("mfence");       \
+	__asm__ __volatile__ ("mfence");       \
 } while (0)
 
 /* Flushes all cache levels of all cores.

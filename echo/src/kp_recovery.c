@@ -328,7 +328,7 @@ unsigned int flush_range(const void *addr, const size_t size)
 		}
 		r_debug("calling clflush(%p) (%lu)\n", (void *)ptr, ptr);
 
-		asm volatile (
+		__asm__ __volatile__ (
 				"clflush (%0)"
 				:                    /* no output registers */
 				: "r" ((void *)ptr)  /* "ptr" is input %0; "r" means
