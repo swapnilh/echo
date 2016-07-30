@@ -80,7 +80,7 @@ int kp_kv_master_create(kp_kv_master **master, consistency_mode mode,
 	}
 
 	/* Initialize its members: */
-	(*master)->id = kp_master_id_count;  //minor race condition... // persistent
+	PM_EQU(((*master)->id), (kp_master_id_count));  //minor race condition... // persistent
 	kp_master_id_count++;
 	if (kp_master_id_count == UINT32_MAX) {
 		kp_error("hit maximum id count for kp_masters: %u\n", kp_master_id_count);
@@ -100,7 +100,7 @@ int kp_kv_master_create(kp_kv_master **master, consistency_mode mode,
 		kp_free((void **)master, use_nvm);  //CHECK - TODO: call _destroy() here?
 		return -1;
 	}
-	(*master)->mode = mode; // persistent
+	PM_EQU(((*master)->mode), (mode)); // persistent
 	  //TODO: need to check that the mode is valid? or does enum do this for us??
 
 #ifdef LOCK_MASTER
@@ -118,7 +118,7 @@ int kp_kv_master_create(kp_kv_master **master, consistency_mode mode,
 	/* For "CDDS": flush, set state, and flush again. These flushes will
 	 * only have an effect if FLUSH_IT is defined. */
 	kp_flush_range(*master, sizeof(kp_kv_master) - sizeof(ds_state), use_nvm);
-	(*master)->state = STATE_ACTIVE; // persistent
+	PM_EQU(((*master)->state), (STATE_ACTIVE)); // persistent
 	kp_flush_range(&((*master)->state), sizeof(ds_state), use_nvm);
 
 	kp_debug("created a new kp_kv_master struct with id=%u and mode=%s\n",
