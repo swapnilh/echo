@@ -466,13 +466,13 @@ int kp_ht_entry_create_internal(kp_ht_entry **entry, const char *key,
 			/* Optimization: if not copying key, just skip call to 
 			 * kp_ht_entry_set(), set key and vt pointers directly.
 			 * Really, we should just delete kp_ht_entry_set() altogether... */
-			(*entry)->key = key;
-			(*entry)->vt = vt;
+			PM_EQU(((*entry)->key), (key));
+			PM_EQU(((*entry)->vt), (vt));
 		}
 	} else {
 		kp_debug("key is NULL, just setting members to null/false\n");
-		(*entry)->key = NULL;
-		(*entry)->vt = NULL;
+		PM_EQU(((*entry)->key), (NULL));
+		PM_EQU(((*entry)->vt), (NULL));
 	}
 	kp_flush_range((void *)*entry, sizeof(kp_ht_entry), use_nvm);
 
@@ -1349,7 +1349,7 @@ commit_state kp_commit_state_transition(kp_commit_record *cr,
 		}
 
 		/* Update and flush, every time: */
-		cr->state = new_state;
+		PM_EQU((cr->state), (new_state));
 		kp_flush_range(&(cr->state), sizeof(commit_state), use_nvm);
 		kp_debug2("Commit [%ju,%ju] TRANSITION: %s -> %s\n",
 				cr->begin_snapshot, cr->end_snapshot, 
@@ -1688,12 +1688,12 @@ int kp_vte_create(kp_vte **vte, const void *value, uint64_t size, uint64_t lvn,
 	/* Here it is: a tombstone value for a deletion is represented by a
 	 * vte with a NULL value pointer and 0 size.
 	 */
-	(*vte)->value = value;
-	(*vte)->size = size;
-	(*vte)->lvn = lvn;
-	(*vte)->ttl = ttl;
-	(*vte)->snapshot = snapshot;
-	(*vte)->cr = cr;
+	PM_EQU(((*vte)->value), (value));
+	PM_EQU(((*vte)->size), (size));
+	PM_EQU(((*vte)->lvn), (lvn));
+	PM_EQU(((*vte)->ttl), (ttl));
+	PM_EQU(((*vte)->snapshot), (snapshot));
+	PM_EQU(((*vte)->cr), (cr));
 	if ((*vte)->value == NULL) {
 		kp_debug_gc("created a new tombstone vte (%p): its value pointer "
 				"is NULL and its size is %zu\n", *vte, (*vte)->size);
@@ -1702,7 +1702,7 @@ int kp_vte_create(kp_vte **vte, const void *value, uint64_t size, uint64_t lvn,
 	/* "CDDS": flush, set state, and flush again. The flushes will only actually
 	 * occur if use_nvm is true. */
 	kp_flush_range((void *)vte, sizeof(kp_vte) - sizeof(ds_state), use_nvm);
-	(*vte)->state = STATE_ACTIVE;
+	PM_EQU(((*vte)->state), (STATE_ACTIVE));
 	kp_flush_range((void *)&((*vte)->state), sizeof(ds_state), use_nvm);
 
 	kp_debug("finished allocating new kp_vte: value=%p, size=%zu, "
@@ -1788,7 +1788,7 @@ int kp_vt_create(kp_kvstore *kv, const char *key, kp_vt **new_vt)
 	 * function - that function checks the parent for its use_nvm
 	 * value!
 	 */
-	(*new_vt)->parent = kv; // persistent
+	PM_EQU(((*new_vt)->parent), (kv)); // persistent
 
 	ret = vector_create(&((*new_vt)->vtes), 0, kv->use_nvm);
 	  /* The vector of VTEs will be made CDDS for kvstores on non-volatile
@@ -1809,14 +1809,14 @@ int kp_vt_create(kp_kvstore *kv, const char *key, kp_vt **new_vt)
 		return -1;
 	}
 
-	(*new_vt)->key = key;  //just copy the pointer; the ht entry owns the key // persistent
-	(*new_vt)->ver_count = 0;	// persistent
-	(*new_vt)->len = 0;		// persistent
+	PM_EQU(((*new_vt)->key), (key));  //just copy the pointer; the ht entry owns the key // persistent
+	PM_EQU(((*new_vt)->ver_count), (0));	// persistent
+	PM_EQU(((*new_vt)->len), (0));		// persistent
 
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*new_vt, sizeof(kp_vt) - sizeof(ds_state),
 			kv->use_nvm);
-	(*new_vt)->state = STATE_ACTIVE; // persistent
+	PM_EQU(((*new_vt)->state), (STATE_ACTIVE)); // persistent
 	kp_flush_range((void *)&((*new_vt)->state), sizeof(ds_state), kv->use_nvm);
 
 	kp_debug("allocated and initialized kp_vt for key %s\n", (*new_vt)->key);
@@ -2593,8 +2593,8 @@ int kp_vt_insert_value(kp_vt *vt, const void *value, size_t size,
 	 * Deletions count as a version. We increment these counts here even
 	 * if there was a conflict on our insert, because the vte is still
 	 * left in the table to be GC'd later. */
-	vt->ver_count++;
-	vt->len++;
+	PM_EQU((vt->ver_count), (vt->ver_count+1));
+	PM_EQU((vt->len), (vt->len+1));
 	kp_flush_range((void *)vt, sizeof(kp_vt), use_nvm);
 	kp_todo("we could try to just flush ver_count and len here, and not "
 			"the whole version table struct, but this is somewhat fragile; "
@@ -3745,7 +3745,7 @@ int kp_put_master(kp_kvstore *kv, const kp_ht_entry *lookup_entry,
 #endif
 				return -1;
 			}
-			new_entry->vt = new_vt;
+			PM_EQU((new_entry->vt), (new_vt));
 			kp_debug("Created new vt (%p) with key=%s, hooked it up to new "
 					"ht entry (key=%s, vt=%p)\n", new_vt, new_vt->key,
 					new_entry->key, new_entry->vt);
@@ -3981,7 +3981,7 @@ int kp_put_master(kp_kvstore *kv, const kp_ht_entry *lookup_entry,
 				 * then we should flush it here, but whatever - it's not
 				 * actually used at the moment, and it's also technically
 				 * reconstructable, with an fsck over the entire store... */
-				kv->pairs_count++;
+				PM_EQU((kv->pairs_count), (kv->pairs_count+1));
 				kp_debug("hash_insert_if_absent(key=%s) succeeded, incremented "
 						"kv->pairs_count to %ju\n", new_entry->key,
 						kv->pairs_count);
@@ -4856,10 +4856,10 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 
 	/* Initialize. ... */
 	kp_kvstore_count++;
-	(*kv)->id = kp_kvstore_count; // persistent
-	(*kv)->pairs_count = 0;		// persistent
-	(*kv)->detect_conflicts = do_conflict_detection; 	// persistent
-	(*kv)->global_snapshot = INITIAL_GLOBAL_SNAPSHOT;	// persistent
+	PM_EQU(((*kv)->id), (kp_kvstore_count)); // persistent
+	PM_EQU(((*kv)->pairs_count), (0));		// persistent
+	PM_EQU(((*kv)->detect_conflicts), (do_conflict_detection)); 	// persistent
+	PM_EQU(((*kv)->global_snapshot), (INITIAL_GLOBAL_SNAPSHOT));	// persistent
 	if (is_master) {
 		ret = kp_mutex_create("(*kv)->snapshot_lock", &((*kv)->snapshot_lock));
 		if (ret != 0) {
@@ -4867,7 +4867,7 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 			return -1;
 		}
 	} else {
-		(*kv)->snapshot_lock = NULL; // persistent
+		PM_EQU(((*kv)->snapshot_lock), (NULL)); // persistent
 		kp_debug("skipping allocation of snapshot_lock and master_lock "
 				"for local store\n");
 	}
@@ -4884,7 +4884,7 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 			return -1;
 		}
 	} else {
-		(*kv)->commit_log = NULL; // persistent
+		PM_EQU(((*kv)->commit_log), (NULL)); // persistent
 		kp_debug("skipping allocation of (*kv)->commit_log for local store\n");
 	}
 
@@ -4896,10 +4896,10 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 		}
 	} else {  //local stores don't need a garbage collector (right?)
 		kp_debug_gc("skipping (*kv)->gc allocation for local store!\n");
-		(*kv)->gc = NULL;
+		PM_EQU(((*kv)->gc), (NULL));
 	}
-	(*kv)->is_master = is_master; // persistent
-	(*kv)->use_nvm = use_nvm;	// persistent 
+	PM_EQU(((*kv)->is_master), (is_master)); // persistent
+	PM_EQU(((*kv)->use_nvm), (use_nvm));	// persistent 
 	kp_debug("new kp_kvstore: setting detect_conflicts=%s, is_master=%s, and "
 			"use_nvm=%s (all of these are args from caller)\n",
 			(*kv)->detect_conflicts ? "true" : "false",
@@ -4964,7 +4964,7 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 	/* CDDS: flush, set state, and flush again. Flushes will be skipped if
 	 * FLUSH_IT is not defined. */
 	kp_flush_range((void *)*kv, sizeof(kp_kvstore) - sizeof(ds_state), (*kv)->use_nvm);
-	(*kv)->state = STATE_ACTIVE; // persist
+	PM_EQU(((*kv)->state), (STATE_ACTIVE)); // persist
 	kp_flush_range((void *)&((*kv)->state), sizeof(ds_state), (*kv)->use_nvm);
 
 	return 0;
@@ -6490,17 +6490,17 @@ int kp_commit_record_create(kp_commit_record **cr, uint64_t begin_snapshot,
 				(*cr)->state_lock, (*cr)->state_cond);
 	}
 #endif
-	(*cr)->use_nvm = use_nvm; // persistent
-	(*cr)->begin_snapshot = begin_snapshot; // persistent
-	(*cr)->end_snapshot = UINT64_MAX;         //invalid // persistent
-	(*cr)->conflict_key = NULL;	// persistent
-	(*cr)->next_cr = NULL;		// persistent
-	(*cr)->debug_signalled = false;	// persistent
+	PM_EQU(((*cr)->use_nvm), (use_nvm)); // persistent
+	PM_EQU(((*cr)->begin_snapshot), (begin_snapshot)); // persistent
+	PM_EQU(((*cr)->end_snapshot), (UINT64_MAX));         //invalid // persistent
+	PM_EQU(((*cr)->conflict_key), (NULL));	// persistent
+	PM_EQU(((*cr)->next_cr), (NULL));		// persistent
+	PM_EQU(((*cr)->debug_signalled), (false));	// persistent
 
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*cr, sizeof(kp_commit_record) - sizeof(commit_state),
 			(*cr)->use_nvm);
-	(*cr)->state = CREATED; // persistent 
+	PM_EQU(((*cr)->state), (CREATED)); // persistent 
 	kp_flush_range((void *)&((*cr)->state), sizeof(commit_state),
 			(*cr)->use_nvm);
 
@@ -6727,17 +6727,17 @@ int kp_kvpair_create(kp_kvpair **pair, const char *key, const void *value,
 	if (!is_deletion) {
 		kp_memcpy(new_value, value, size, use_nvm);
 	}
-	(*pair)->key = new_key;
-	(*pair)->value = new_value;
-	(*pair)->use_nvm = use_nvm;
-	(*pair)->size = size;
+	PM_EQU(((*pair)->key), (new_key));
+	PM_EQU(((*pair)->value), (new_value));
+	PM_EQU(((*pair)->use_nvm), (use_nvm));
+	PM_EQU(((*pair)->size), (size));
 	kp_debug("creating keypair: arg value=%p, local new_value=%p, "
 			"kvpair->value=%p\n", value, new_value, (*pair)->value);
 	
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*pair, sizeof(kp_kvpair) - sizeof(ds_state),
 			(*pair)->use_nvm);
-	(*pair)->state = STATE_ACTIVE;
+	PM_EQU(((*pair)->state), (STATE_ACTIVE));
 	kp_flush_range((void *)&((*pair)->state), sizeof(ds_state),
 		(*pair)->use_nvm);
 
@@ -6794,7 +6794,7 @@ uint64_t kp_increment_snapshot_mark_in_use(kp_kvstore *kv)
 	kp_mutex_lock("kv->snapshot_lock", kv->snapshot_lock);
 
 	snapshot = kv->global_snapshot;
-	kv->global_snapshot += 1;
+	PM_EQU((kv->global_snapshot), (kv->global_snapshot + 1));
 	if (kv->use_nvm) {  //I think this makes sense... CHECK
 		flush_range(&(kv->global_snapshot), sizeof(uint64_t));
 	}
@@ -7572,7 +7572,7 @@ uint64_t kp_append_to_commit_log(kp_kvstore *kv, kp_commit_record *cr)
 	 * that are already working: we used to have the flush (with an mfence
 	 * inside) here...). */
 	end_snapshot = kv->global_snapshot;
-	kv->global_snapshot += 1;
+	PM_EQU((kv->global_snapshot), (kv->global_snapshot + 1));
 	kp_mfence();
 	//kp_flush_range(&(kv->global_snapshot), sizeof(uint64_t), kv->use_nvm);
 	kp_debug2("incremented kv->global_snapshot to %ju; end_snapshot=%ju\n",
@@ -7606,7 +7606,7 @@ uint64_t kp_append_to_commit_log(kp_kvstore *kv, kp_commit_record *cr)
 	 * failure occurred (although it seems like the commit_log should
 	 * implicitly know the end_snapshot of every commit record...).
 	 * We unlock when we're done. */
-	cr->end_snapshot = end_snapshot;
+	PM_EQU((cr->end_snapshot), (end_snapshot));
 	kp_flush_range(&(cr->end_snapshot), sizeof(uint64_t), kv->use_nvm);
 
 	kp_mutex_unlock("cr->state_lock", cr->state_lock);
@@ -7662,7 +7662,7 @@ uint64_t kp_append_to_commit_log(kp_kvstore *kv, kp_commit_record *cr)
 #endif
 			kp_debug_print_cr("cr later in kp_append_to_commit_log", cr);
 			kp_debug_print_cr("prev_cr in kp_append_to_commit_log", prev_cr);
-			prev_cr->next_cr = cr;
+			PM_EQU((prev_cr->next_cr), (cr));
 			  /* Should we flush this? Seems like it's recoverable, can
 			   * be set again during recovery just using commit log. */
 			kp_mfence();
@@ -7711,7 +7711,7 @@ uint64_t kp_append_to_commit_log(kp_kvstore *kv, kp_commit_record *cr)
 	} else {
 		kp_debug2("skipping prev_cr manipulation because detect_conflicts is "
 				"false\n");
-		prev_cr = NULL;  //to be safe, below.
+		PM_EQU((prev_cr), (NULL));  //to be safe, below.
 	}
 
 	/* The commit record's state is CREATED, but we need to check the
