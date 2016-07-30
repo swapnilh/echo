@@ -140,7 +140,7 @@ void kp_malloc(void **ptr, size_t size, bool use_nvm)
 		/* malloc_v is just malloc, but for profiling etc., may be helpful
 		 * to keep it in the malloc_v wrapper function.
 		 * No flushing / fences needed. */
-		*ptr = malloc_v(size);
+		*ptr = malloc_v(size); // persistent ??
 	}
 }
 
@@ -149,7 +149,7 @@ void kp_kpalloc(void **ptr, size_t size, bool use_nvm)
 	if (use_nvm) {
 		pcm_calloc(ptr, size);  //will do flushing!
 	} else {
-		*ptr = malloc_v(size);
+		*ptr = malloc_v(size); // persistent ???
 	}
 }
 
@@ -163,7 +163,7 @@ void kp_realloc(void **ptr, size_t new_size, size_t old_size, bool use_nvm)
 	DEBUG("ignoring use_nvm=%s for kp_realloc(); caller (vector object) "
 			"should flush as necessary!\n", use_nvm ? "true" : "false");
 	if(use_nvm){
-		*ptr = pmalloc(new_size);
+	    PM_EQU((*ptr), (pmalloc(new_size)));
 	    kp_memcpy(*ptr, oldptr, old_size, use_nvm);	
 	}
 	else{
