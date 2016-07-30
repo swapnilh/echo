@@ -173,7 +173,10 @@ void kp_realloc(void **ptr, size_t new_size, size_t old_size, bool use_nvm)
 
 void kp_memcpy(void *dest, const void *src, size_t n, bool use_nvm)
 {
-	memcpy(dest, src, n);
+	if(use_nvm)
+		PM_MEMCPY(dest, src, n);
+	else
+		memcpy(dest, src, n);
 	if (use_nvm) {
 		flush_range(dest, n);
 		  /* dest is the address of the first byte of the destination
@@ -196,7 +199,10 @@ void kp_strncpy(char *dest, const char *src, size_t n, bool use_nvm)
 	strncpy(dest, src, n);
 #else
 	char *ret;
-	ret = strncpy(dest, src, n);
+	if(use_nvm)
+		ret = PM_STRNCPY(dest, src, n);
+	else
+		ret = strncpy(dest, src, n);
 	if (ret != dest) {
 		r_die("strncpy: dest=%p, but ret=%p\n", dest, ret);
 	}
