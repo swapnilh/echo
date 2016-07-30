@@ -40,6 +40,7 @@ extern __thread unsigned long long tbuf_ptr;
 
 extern char *tbuf;
 extern unsigned long long tbuf_sz;
+extern unsigned long long n_tentry;
 extern pthread_spinlock_t tbuf_lock;
 extern int mtm_enable_trace;
 extern int mtm_debug_buffer;
@@ -47,6 +48,7 @@ extern struct timeval glb_time;
 extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
 
 
+#define die()	{assert(0);}
 #define time_since_start				\
 	({						\
 		gettimeofday(&mtm_time, NULL);		\
@@ -84,7 +86,7 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
 		while(tbuf_ptr < tbuf_sz)		\
 		{					\
 			tbuf_ptr = tbuf_ptr + 1 + 	\
-				fprintf(m_out,"%s", 	\
+				fprintf(m_err,"%s", 	\
 				tbuf + tbuf_ptr);	\
 		}					\
 		tbuf_sz = 0; 				\
@@ -99,6 +101,7 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
 		tbuf_sz += tsz;				\
 							\
 	}						\
+        n_tentry++;					\
 	pthread_spin_unlock(&tbuf_lock);		\
 	}						\
     }

@@ -2109,6 +2109,7 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
     {"base", no_argument, &base_flag, 1},
     {"cache", no_argument, &cache_flag, 1},
     {"kpvm-dram", no_argument, &WHICH_KEY_VALUE_STORE, 0},
+    {"enable-trace", no_argument, &mtm_enable_trace, 0},
     {0, 0, 0, 0}
   };
 
@@ -2119,7 +2120,7 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
      * as well as long options.
      * See getopt_long(3).
      */
-    c = getopt_long(argc, argv, "pd:", long_options, &option_index);
+    c = getopt_long(argc, argv, "npd:", long_options, &option_index);
     if (c == -1) {
       break;  //no more - or -- options
     }
@@ -2147,6 +2148,11 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
         kp_error("invalid delay value: %s\n", optarg);
         usage(argv[0]);
       }
+      break;
+
+    case 'n':
+      kp_debug("case 'n': setting mtm_enable_trace=1\n");
+      mtm_enable_trace = 1;
       break;
 
     default:  //getopt_long() may return ':' or '?' for unrecognized/missing options
@@ -2234,12 +2240,28 @@ int main(int argc, char *argv[]){
   bool base = false;
   int delay = 0;
   push_out_of_cache = false;
-
+  /* Initialize pmem pool */
   const char* path = "/dev/shm/efile";
   void *pmp;
   if ((pmp = pmemalloc_init(path, (size_t)PMSIZE)) == NULL) {
     printf("Unable to allocate memory pool\n");
     exit(0);
+  }
+  /* Initialize tracing framework */
+  gettimeofday(&glb_time, NULL);
+  glb_tv_sec  = glb_time.tv_sec;
+  glb_tv_usec = glb_time.tv_usec;
+  glb_start_time = glb_tv_sec * 1000000 + glb_tv_usec;
+
+  pthread_spin_init(&tbuf_lock, PTHREAD_PROCESS_SHARED);
+  /* tbuf = (char*)malloc(MAX_TBUF_SZ); To avoid interaction with M's hoard */
+  tbuf = (char*)mmap(0, MAX_TBUF_SZ, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  /* MAZ_TBUF_SZ influences how often we compress and hence the overall execution speed. */
+  if(!tbuf) {
+        fprintf(m_out, "Failed to allocate trace buffer. Abort now.\n");
+        die();
+  } else {
+        fprintf(m_out, "Successfully allocated trace buffer.\n");
   }
 
   srandom(time(NULL));
@@ -2448,6 +2470,7 @@ int main(int argc, char *argv[]){
       // Restore for anything remaining
       put_probability = tmp_put_prob;
 */
+       fprintf(m_out, "Number of trace entries = %llu\n", n_tentry);
        printf("***CONCLUDING THREAD EVALUATION***\n");
        // m5_switchcpu();
       //    }

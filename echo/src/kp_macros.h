@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <pm_instr.h>
 
 /* KP_ASSERT should always be defined for sanity-checking purposes, and
  * only un-defined when we want to disable sanity-checking code to get

@@ -11,6 +11,26 @@
 #include "kp_macros.h"
 #include "kp_recovery.h"
 
+/* Tracing infrastructure */
+__thread struct timeval mtm_time;
+__thread int mtm_tid = -1;
+
+__thread char tstr[TSTR_SZ];
+__thread unsigned long long tsz = 0;
+__thread unsigned long long tbuf_ptr = 0;
+
+/* Can we make these thread local ? */
+char *tbuf;
+pthread_spinlock_t tbuf_lock;
+unsigned long long tbuf_sz;
+unsigned long long n_tentry = 0;
+int mtm_enable_trace = 0;
+int mtm_debug_buffer = 1;
+struct timeval glb_time;
+unsigned long long start_buf_drain = 0, end_buf_drain = 0, buf_drain_period = 0;
+unsigned long long glb_tv_sec = 0, glb_tv_usec = 0, glb_start_time = 0;
+
+
 int kp_mutex_create(const char *name, pthread_mutex_t **mutex)
 {
 	int ret;

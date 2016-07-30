@@ -11,7 +11,7 @@ INCL = -I$(VECTOR_DIR)/ -Ihash_table/ -Ithreadpool/ -I../include
 MALLOC_DIR	= ./malloc
 MALLOC_LIBS	= $(MALLOC_DIR)/lib
 
-CC 	= gcc -ggdb -O0 -std=c99
+CC 	= gcc -ggdb -O0 -std=c99 -D_ENABLE_TRACE
 XX = g++ -std=c++11 -ggdb -O0
 KPKVLIBS = -lkp_kvstore
 TCMALLOC_LIBS	= -ltcmalloc_minimal
