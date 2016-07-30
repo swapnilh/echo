@@ -794,7 +794,7 @@ hash_initialize (Hash_table **table, size_t candidate, const Hash_tuning *tuning
 
 	if (!tuning)
 		tuning = &default_tuning;
-	(*table)->tuning = tuning;
+	PM_EQU(((*table)->tuning), (tuning));
 	if (!check_tuning (*table))
 	{
 		/* Fail if the tuning options are invalid.  This is the only occasion
@@ -805,7 +805,7 @@ hash_initialize (Hash_table **table, size_t candidate, const Hash_tuning *tuning
 		goto fail;
 	}
 
-	(*table)->n_buckets = compute_bucket_size (candidate, tuning);
+	PM_EQU(((*table)->n_buckets), (compute_bucket_size (candidate, tuning)));
 	if (!(*table)->n_buckets)
 		goto fail;
 
@@ -815,16 +815,16 @@ hash_initialize (Hash_table **table, size_t candidate, const Hash_tuning *tuning
 			use_nvm);
 	if ((*table)->bucket == NULL)
 		goto fail;
-	(*table)->bucket_limit = (*table)->bucket + (*table)->n_buckets; // persistent
-	(*table)->n_buckets_used = 0;	// persistent
-	(*table)->n_entries = 0;	// persistent
+	PM_EQU(((*table)->bucket_limit), ((*table)->bucket + (*table)->n_buckets)); // persistent
+	PM_EQU(((*table)->n_buckets_used), (0));	// persistent
+	PM_EQU(((*table)->n_entries), (0));	// persistent
 
-	(*table)->hasher = hasher;	// persistent
-	(*table)->comparator = comparator;	// persistent
-	(*table)->data_freer = data_freer;	// persistent
-	(*table)->use_nvm = use_nvm;		// persistent
+	PM_EQU(((*table)->hasher), (hasher));	// persistent
+	PM_EQU(((*table)->comparator), (comparator));	// persistent
+	PM_EQU(((*table)->data_freer), (data_freer));	// persistent
+	PM_EQU(((*table)->use_nvm), (use_nvm));		// persistent
 
-	(*table)->free_entry_list = NULL;	// persistent
+	PM_EQU(((*table)->free_entry_list), (NULL));	// persistent
 #if USE_OBSTACK
 	obstack_init (table->entry_stack);
 #endif
@@ -852,7 +852,7 @@ hash_initialize (Hash_table **table, size_t candidate, const Hash_tuning *tuning
 
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*table, sizeof(Hash_table) - sizeof(ds_state), use_nvm);
-	(*table)->state = STATE_ACTIVE;
+	PM_EQU(((*table)->state), (STATE_ACTIVE));
 	kp_flush_range((void *)&((*table)->state), sizeof(ds_state), use_nvm);
 
 	return 0;
@@ -1545,12 +1545,12 @@ hash_insert_if_absent (Hash_table *table, void const *entry,
 
 		/* Add ENTRY in the overflow of the bucket.  */
 
-		new_entry->data = (void *) entry;
-		new_entry->next = bucket->next;
+		PM_EQU((new_entry->data), ((void *) entry));
+		PM_EQU((new_entry->next), (bucket->next));
 		kp_flush_range((void *)new_entry, sizeof(struct hash_entry),
 				table->use_nvm);
 
-		bucket->next = new_entry;
+		PM_EQU((bucket->next), (new_entry));
 		kp_flush_range((void *)&(bucket->next), sizeof(struct hash_entry *),
 				table->use_nvm);
 #ifdef HT_ASSERT
@@ -1564,14 +1564,14 @@ hash_insert_if_absent (Hash_table *table, void const *entry,
 #ifdef REHASHING_ENABLED
 		kp_rdunlock("hash table->rwlock", table->rwlock);  //PJH
 #endif
-		table->n_entries++;
+		PM_EQU((table->n_entries), (table->n_entries+1));
 		return 1;
 	}
 
 	//ELSE:
 	/* Add ENTRY right in the bucket head.  */
 
-	bucket->data = (void *) entry;
+	PM_EQU((bucket->data), ((void *) entry));
 	kp_flush_range((void *)&(bucket->data), sizeof(void *), table->use_nvm);
 	ht_debug("set bucket->data=%p (bucket->next=%p (should be nil))\n",
 			bucket->data, bucket->next);
@@ -1584,8 +1584,8 @@ hash_insert_if_absent (Hash_table *table, void const *entry,
 
 	/* Assume that these happen atomically, so no fine-grained locking
 	 * needed... */
-	table->n_entries++;
-	table->n_buckets_used++;
+	PM_EQU((table->n_entries), (table->n_entries+1));
+	PM_EQU((table->n_buckets_used), (table->n_buckets_used+1));
 #ifdef REHASHING_ENABLED
 	kp_rdunlock("hash table->rwlock", table->rwlock);  //PJH
 #endif
