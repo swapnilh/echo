@@ -68,14 +68,14 @@ int vector_create(vector **v, unsigned long long size, bool use_nvm)
 #endif
 		return -1;
 	}
-	(*v)->size = init_size; // persistent
+	PM_EQU(((*v)->size), (init_size)); // persistent
 //	printf("init_size=%d, sizeof(vector)=%d\n", init_size, sizeof(vector));
-	(*v)->count = 0;	// persistent
-	(*v)->use_nvm = use_nvm;	// persistent
+	PM_EQU(((*v)->count), (0));	// persistent
+	PM_EQU(((*v)->use_nvm), (use_nvm));	// persistent
 	
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*v, sizeof(vector) - sizeof(ds_state), use_nvm);
-	(*v)->state = STATE_ACTIVE;
+	PM_EQU(((*v)->state), (STATE_ACTIVE));
 	kp_flush_range((void *)&((*v)->state), sizeof(ds_state), use_nvm);
 
 	v_debug("successfully created new vector\n");
@@ -231,7 +231,7 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 		 *   happens to allocate v->data and v->size in two different cache
 		 *   lines. */
 		kp_realloc((void **)&(v->data), sizeof(void*) * new_size, sizeof(void*) * v->size, v->use_nvm);
-		v->size = new_size;
+		PM_EQU((v->size), (new_size));
 		kp_flush_range(&(v->data), flush_size, v->use_nvm);  //flush both data and size!
 		/* Leak window end. If we fail after the flush() has returned,
 		 * then the next call to vector_append() will skip the resizing
@@ -242,7 +242,7 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 			/* Best effort on failure: reset size to what it was before,
 			 * and let caller handle the rest.
 			 */
-			v->size = orig_size;
+			PM_EQU((v->size), (orig_size));
 			return -1;
 		}
 
@@ -276,14 +276,14 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 
 	/* Use two flushes here to make this "repeatable" - if we fail after
 	 * the first set + flush, there are no real effects. */
-	v->data[v->count] = (void *)e;
+	PM_EQU((v->data[v->count]), ((void *)e));
 	kp_flush_range(&(v->data[v->count]), sizeof(void *), v->use_nvm);
 
 	/* Do we need a memory fence right here? Only if we're flushing (so
 	 * the fence is already internal in kp_flush_range()); otherwise,
 	 * we're not concerned about anybody else seeing the count and the
 	 * element out-of-order... (right?). */
-	v->count++;
+	PM_EQU((v->count), (v->count+1));
 	kp_flush_range((void *)&(v->count), sizeof(unsigned long long), v->use_nvm);
 	v_debug("stored new element %s in slot %llu (now count=%llu, size=%llu)\n",
 			(char *)(v->data[(v->count)-1]), v->count-1, v->count, v->size);
@@ -465,9 +465,9 @@ uint64_t vector_insert(vector *v, const void *e, vector_comparator cmp)
 	/* Use two flushes here to make this "repeatable" - if we fail after
 	 * the first set + flush, there are no real effects (well, this was
 	 * true for append... is it any different for insert??). */
-	v->data[insert_idx] = (void *)e;
+	PM_EQU((v->data[insert_idx]), ((void *)e));
 	kp_flush_range(&(v->data[insert_idx]), sizeof(void *), v->use_nvm);
-	v->count++;
+	PM_EQU((v->count), (v->count+1));
 	kp_flush_range(&(v->count), sizeof(unsigned long long), v->use_nvm);
 	//v_print("stored new element %s in slot %llu (now count=%llu, size=%llu)\n",
 	//		(char *)(v->data[insert_idx]), insert_idx, v->count, v->size);
