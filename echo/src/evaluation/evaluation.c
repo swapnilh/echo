@@ -734,7 +734,7 @@ void fetch_key_from_index(int index, void** key){
     uint64_t real_index = 0;
     if (index != 0)
       real_index = index % max_key;
-    *key = malloc(key_size+1);
+    *key = malloc(key_size+1); // freud : why not persistent ? 
     if(*key == NULL)
       kp_die("Malloc failed in printing key\n");
     

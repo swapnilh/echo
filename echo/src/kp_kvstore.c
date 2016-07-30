@@ -1788,7 +1788,7 @@ int kp_vt_create(kp_kvstore *kv, const char *key, kp_vt **new_vt)
 	 * function - that function checks the parent for its use_nvm
 	 * value!
 	 */
-	(*new_vt)->parent = kv;
+	(*new_vt)->parent = kv; // persistent
 
 	ret = vector_create(&((*new_vt)->vtes), 0, kv->use_nvm);
 	  /* The vector of VTEs will be made CDDS for kvstores on non-volatile
@@ -1809,14 +1809,14 @@ int kp_vt_create(kp_kvstore *kv, const char *key, kp_vt **new_vt)
 		return -1;
 	}
 
-	(*new_vt)->key = key;  //just copy the pointer; the ht entry owns the key
-	(*new_vt)->ver_count = 0;
-	(*new_vt)->len = 0;
+	(*new_vt)->key = key;  //just copy the pointer; the ht entry owns the key // persistent
+	(*new_vt)->ver_count = 0;	// persistent
+	(*new_vt)->len = 0;		// persistent
 
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*new_vt, sizeof(kp_vt) - sizeof(ds_state),
 			kv->use_nvm);
-	(*new_vt)->state = STATE_ACTIVE;
+	(*new_vt)->state = STATE_ACTIVE; // persistent
 	kp_flush_range((void *)&((*new_vt)->state), sizeof(ds_state), kv->use_nvm);
 
 	kp_debug("allocated and initialized kp_vt for key %s\n", (*new_vt)->key);
@@ -3711,7 +3711,7 @@ int kp_put_master(kp_kvstore *kv, const kp_ht_entry *lookup_entry,
 			 * the kvstore. */
 			copy_key = false;
 			ret = kp_ht_entry_create_internal(&new_entry, lookup_entry->key,
-					copy_key, NULL, kv->use_nvm);
+					copy_key, NULL, kv->use_nvm); /* kv is master store */
 			if (ret != 0) {
 				kp_error("kp_ht_entry_create_internal() returned error=%d\n", ret);
 #ifdef CONSERVATIVE_LOCKS
@@ -4856,10 +4856,10 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 
 	/* Initialize. ... */
 	kp_kvstore_count++;
-	(*kv)->id = kp_kvstore_count;
-	(*kv)->pairs_count = 0;
-	(*kv)->detect_conflicts = do_conflict_detection;
-	(*kv)->global_snapshot = INITIAL_GLOBAL_SNAPSHOT;
+	(*kv)->id = kp_kvstore_count; // persistent
+	(*kv)->pairs_count = 0;		// persistent
+	(*kv)->detect_conflicts = do_conflict_detection; 	// persistent
+	(*kv)->global_snapshot = INITIAL_GLOBAL_SNAPSHOT;	// persistent
 	if (is_master) {
 		ret = kp_mutex_create("(*kv)->snapshot_lock", &((*kv)->snapshot_lock));
 		if (ret != 0) {
@@ -4867,7 +4867,7 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 			return -1;
 		}
 	} else {
-		(*kv)->snapshot_lock = NULL;
+		(*kv)->snapshot_lock = NULL; // persistent
 		kp_debug("skipping allocation of snapshot_lock and master_lock "
 				"for local store\n");
 	}
@@ -4884,7 +4884,7 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 			return -1;
 		}
 	} else {
-		(*kv)->commit_log = NULL;
+		(*kv)->commit_log = NULL; // persistent
 		kp_debug("skipping allocation of (*kv)->commit_log for local store\n");
 	}
 
@@ -4898,8 +4898,8 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 		kp_debug_gc("skipping (*kv)->gc allocation for local store!\n");
 		(*kv)->gc = NULL;
 	}
-	(*kv)->is_master = is_master;
-	(*kv)->use_nvm = use_nvm;
+	(*kv)->is_master = is_master; // persistent
+	(*kv)->use_nvm = use_nvm;	// persistent 
 	kp_debug("new kp_kvstore: setting detect_conflicts=%s, is_master=%s, and "
 			"use_nvm=%s (all of these are args from caller)\n",
 			(*kv)->detect_conflicts ? "true" : "false",
@@ -4964,7 +4964,7 @@ int kp_kvstore_create(kp_kvstore **kv, bool is_master,
 	/* CDDS: flush, set state, and flush again. Flushes will be skipped if
 	 * FLUSH_IT is not defined. */
 	kp_flush_range((void *)*kv, sizeof(kp_kvstore) - sizeof(ds_state), (*kv)->use_nvm);
-	(*kv)->state = STATE_ACTIVE;
+	(*kv)->state = STATE_ACTIVE; // persist
 	kp_flush_range((void *)&((*kv)->state), sizeof(ds_state), (*kv)->use_nvm);
 
 	return 0;
@@ -6490,17 +6490,17 @@ int kp_commit_record_create(kp_commit_record **cr, uint64_t begin_snapshot,
 				(*cr)->state_lock, (*cr)->state_cond);
 	}
 #endif
-	(*cr)->use_nvm = use_nvm;
-	(*cr)->begin_snapshot = begin_snapshot;
-	(*cr)->end_snapshot = UINT64_MAX;         //invalid
-	(*cr)->conflict_key = NULL;
-	(*cr)->next_cr = NULL;
-	(*cr)->debug_signalled = false;
+	(*cr)->use_nvm = use_nvm; // persistent
+	(*cr)->begin_snapshot = begin_snapshot; // persistent
+	(*cr)->end_snapshot = UINT64_MAX;         //invalid // persistent
+	(*cr)->conflict_key = NULL;	// persistent
+	(*cr)->next_cr = NULL;		// persistent
+	(*cr)->debug_signalled = false;	// persistent
 
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*cr, sizeof(kp_commit_record) - sizeof(commit_state),
 			(*cr)->use_nvm);
-	(*cr)->state = CREATED;
+	(*cr)->state = CREATED; // persistent 
 	kp_flush_range((void *)&((*cr)->state), sizeof(commit_state),
 			(*cr)->use_nvm);
 

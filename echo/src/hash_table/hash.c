@@ -815,16 +815,16 @@ hash_initialize (Hash_table **table, size_t candidate, const Hash_tuning *tuning
 			use_nvm);
 	if ((*table)->bucket == NULL)
 		goto fail;
-	(*table)->bucket_limit = (*table)->bucket + (*table)->n_buckets;
-	(*table)->n_buckets_used = 0;
-	(*table)->n_entries = 0;
+	(*table)->bucket_limit = (*table)->bucket + (*table)->n_buckets; // persistent
+	(*table)->n_buckets_used = 0;	// persistent
+	(*table)->n_entries = 0;	// persistent
 
-	(*table)->hasher = hasher;
-	(*table)->comparator = comparator;
-	(*table)->data_freer = data_freer;
-	(*table)->use_nvm = use_nvm;
+	(*table)->hasher = hasher;	// persistent
+	(*table)->comparator = comparator;	// persistent
+	(*table)->data_freer = data_freer;	// persistent
+	(*table)->use_nvm = use_nvm;		// persistent
 
-	(*table)->free_entry_list = NULL;
+	(*table)->free_entry_list = NULL;	// persistent
 #if USE_OBSTACK
 	obstack_init (table->entry_stack);
 #endif

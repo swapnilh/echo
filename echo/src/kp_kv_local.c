@@ -80,7 +80,7 @@ int kp_kv_local_create(kp_kv_master *master, kp_kv_local **local,
 		return -1;
 	}
 
-    (*local)->id = kp_local_id_count;  //minor race condition...
+    (*local)->id = kp_local_id_count;  //minor race condition... // persistent
 	kp_local_id_count++;
 	if (kp_local_id_count == UINT32_MAX) {
 		kp_error("hit maximum id count for kp_locals: %u\n", kp_local_id_count);
@@ -114,7 +114,7 @@ int kp_kv_local_create(kp_kv_master *master, kp_kv_local **local,
 	}
 	/* Ensure that if we call kp_ht_entry_destroy() below, it won't try to
 	 * free some random address in memory! */
-	(*local)->lookup_entry->key = NULL;
+	(*local)->lookup_entry->key = NULL; // persistent
 
 	ret = kp_iterator_create(&((*local)->iter), use_nvm);
 	if (ret != 0) {
@@ -136,9 +136,9 @@ int kp_kv_local_create(kp_kv_master *master, kp_kv_local **local,
 	}
 
 	/* Ask the master for an initial snapshot number: */
-	(*local)->master = master;
-	(*local)->mode = kp_master_get_mode(master);
-	ret64 = kp_master_get_initial_snapshot((*local)->master);
+	(*local)->master = master;	// persistent
+	(*local)->mode = kp_master_get_mode(master);	// persistent
+	ret64 = kp_master_get_initial_snapshot((*local)->master);	// persistent
 	if (ret64 == UINT64_MAX) {
 		kp_error("kp_master_get_initial_snapshot() returned error\n");
 		kp_iter_item_destroy(&((*local)->item));
@@ -148,10 +148,10 @@ int kp_kv_local_create(kp_kv_master *master, kp_kv_local **local,
 		kp_free((void **)local, use_nvm);  //CHECK - TODO: call _destroy() here instead!
 		return -1;
 	}
-	(*local)->snapshot = ret64;
+	(*local)->snapshot = ret64;	// persistent
 	kp_debug("initialized local snapshot to %ju (got from master)\n",
 			(*local)->snapshot);
-	(*local)->expected_max_keys = expected_max_keys;
+	(*local)->expected_max_keys = expected_max_keys;	// persistent
 
 	ret = kp_rwlock_create("local->rwlock", &((*local)->rwlock));
 	if (ret != 0) {
@@ -170,7 +170,7 @@ int kp_kv_local_create(kp_kv_master *master, kp_kv_local **local,
 	/* CDDS: flush, set state, and flush again. Will only actually do
 	 * any flushing if both use_nvm and FLUSH_IT are true/defined. */
 	kp_flush_range(*local, sizeof(kp_kv_local) - sizeof(ds_state), use_nvm);
-	(*local)->state = STATE_ACTIVE;
+	(*local)->state = STATE_ACTIVE;	// persistent
 	kp_flush_range(&((*local)->state), sizeof(ds_state), use_nvm);
 
 	return 0;
@@ -970,7 +970,7 @@ int kp_local_commit(kp_kv_local *local, void **conflict_list)
 	 * coupled together. In the future, we may require that the client
 	 * thread itself calls kp_local_merge_commits() to explicitly merge
 	 * the commit(s) is has just made.
-	 *
+	 * freud : I knew it was all git ! Ha !
 	 * This is all analogous to git's separation of "git commit" and
 	 * "git push". */
 	new_snapshot = UINT64_MAX;

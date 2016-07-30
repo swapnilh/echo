@@ -68,10 +68,10 @@ int vector_create(vector **v, unsigned long long size, bool use_nvm)
 #endif
 		return -1;
 	}
-	(*v)->size = init_size;
+	(*v)->size = init_size; // persistent
 //	printf("init_size=%d, sizeof(vector)=%d\n", init_size, sizeof(vector));
-	(*v)->count = 0;
-	(*v)->use_nvm = use_nvm;
+	(*v)->count = 0;	// persistent
+	(*v)->use_nvm = use_nvm;	// persistent
 	
 	/* "CDDS": flush, set state, and flush again. */
 	kp_flush_range((void *)*v, sizeof(vector) - sizeof(ds_state), use_nvm);
@@ -123,7 +123,7 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 {
 	unsigned long long orig_size, new_size;
 	int flush_size = 0;
-
+	/* freud : Everything here is persistent */
 	/* HEADS UP: this function is mostly the same as vector_insert(), so
 	 * if you update one, you should probably update the other! */
 
