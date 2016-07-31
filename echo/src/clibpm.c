@@ -4,6 +4,9 @@
 #include <pthread.h>
 
 pthread_mutex_t pmp_mutex;
+static void *pmemalloc_reserve(size_t size);
+static void pmemalloc_free(void *abs_ptr_);
+
 
 void* pmalloc(size_t sz) {
   pthread_mutex_lock(&pmp_mutex);
@@ -355,17 +358,12 @@ void *pmemalloc_init(const char *path, size_t size) {
   return NULL;
 }
 
-// pmemalloc_static_area -- return a pointer to the static 4k area
-void *pmemalloc_static_area() {
-  DEBUG("pmp=0x%lx", pmp);
-
-  return ABS_PTR((void *) PMEM_STATIC_OFFSET);
-}
 
 // ROTATING FIRST FIT
 struct clump* prev_clp = NULL;
 
 // pmemalloc_reserve -- allocate memory, volatile until pmemalloc_activate()
+static
 void *pmemalloc_reserve(size_t size) {
   size_t nsize;
 
@@ -474,32 +472,8 @@ void *pmemalloc_reserve(size_t size) {
   return NULL;
 }
 
-// pmemalloc_activate -- atomically persist memory, mark in-use, store pointers
-
-void pmemalloc_activate_helper(void *abs_ptr) {
-  struct clump *clp;
-  size_t sz;
-  DEBUG("ptr_=%lx", abs_ptr);
-
-  clp = (struct clump *) ((uintptr_t) abs_ptr - PMEM_CHUNK_SIZE);
-
-  ASSERTeq(clp->size & PMEM_STATE_MASK, PMEM_STATE_RESERVED);
-  sz = clp->size & ~PMEM_STATE_MASK;
-
-  pmem_persist(abs_ptr, clp->size - PMEM_CHUNK_SIZE, 0);
-
-  PM_EQU((clp->size), (sz | PMEM_STATE_ACTIVE));
-  pmem_persist(clp, sizeof(*clp), 0);
-}
-
-// pmemalloc_activate
-void pmemalloc_activate(void *abs_ptr) {
-  //pthread_mutex_lock(&pmp_mutex);
-  pmemalloc_activate_helper(abs_ptr);
-  //pthread_mutex_unlock(&pmp_mutex);
-}
-
 // pmemalloc_free -- free memory, find adjacent free blocks and coalesce them
+static
 void pmemalloc_free(void *abs_ptr_) {
 
   if (abs_ptr_ == NULL)
@@ -589,167 +563,3 @@ void pmemalloc_free(void *abs_ptr_) {
   }
 
 }
-
-//  pmemalloc_check -- check the consistency of a pmem pool
-void pmemalloc_check(const char *path) {
-  void *pmp;
-  int fd;
-  struct stat stbuf;
-  struct clump *clp;
-  struct clump *lastclp;
-  struct pool_header *hdrp;
-  size_t clumptotal;
-  /*
-   * stats we keep for each type of memory:
-   *  stats[PMEM_STATE_FREE] for free clumps
-   *  stats[PMEM_STATE_RESERVED] for reserved clumps
-   *  stats[PMEM_STATE_ACTIVE] for active clumps
-   *  stats[PMEM_STATE_UNUSED] for overall totals
-   */
-  struct pmem_stat {
-    size_t largest;
-    size_t smallest;
-    size_t bytes;
-    unsigned count;
-  } stats[PMEM_STATE_UNUSED + 1];
-
-  for (unsigned int p_itr = 0; p_itr < (PMEM_STATE_UNUSED + 1); p_itr++) {
-      stats[p_itr].largest = 0;
-      stats[p_itr].smallest = 0;
-      stats[p_itr].bytes = 0;
-      stats[p_itr].count = 0;
-  }
-
-  const char *names[] = { "Free", "Reserved", "Active", "TOTAL", };
-  int i;
-
-  DEBUG("path=%s", path);
-
-  if ((fd = open(path, O_RDONLY)) < 0)
-    FATALSYS("%s", path);
-
-  if (fstat(fd, &stbuf) < 0)
-    FATALSYS("fstat");
-
-  DEBUG("file size 0x%lx", stbuf.st_size);
-
-  if (stbuf.st_size < PMEM_MIN_POOL_SIZE)
-    FATAL("size %lu too small (must be at least %lu)", stbuf.st_size,
-          PMEM_MIN_POOL_SIZE);
-
-  if ((pmp = mmap((caddr_t) LIBPM, stbuf.st_size, PROT_READ,
-  MAP_SHARED | MAP_POPULATE,
-                  fd, 0)) == MAP_FAILED)
-    FATALSYS("mmap");DEBUG("pmp %lx", pmp);
-
-  close(fd);
-
-  hdrp = (struct pool_header *)ABS_PTR((struct pool_header *) PMEM_HDR_OFFSET);
-  DEBUG("   hdrp 0x%lx (off 0x%lx)", hdrp, REL_PTR(hdrp));
-
-  if (strcmp(hdrp->signature, PMEM_SIGNATURE))
-    FATAL("failed signature check");DEBUG("signature check passed");
-
-  clp = (struct clump *)ABS_PTR((struct clump *) PMEM_CLUMP_OFFSET);
-  /*
-   * location of last clump is calculated by rounding the file
-   * size down to a multiple of 64, and then subtracting off
-   * another 64 to hold the struct clump.  the last clump is
-   * indicated by a size of zero.
-   */
-  lastclp =
-      (struct clump *)ABS_PTR(
-          (struct clump *) (stbuf.st_size & ~(PMEM_CHUNK_SIZE - 1)) - PMEM_CHUNK_SIZE);
-  DEBUG("clp 0x%lx (off 0x%lx)", clp, REL_PTR(clp));DEBUG("lastclp 0x%lx (off 0x%lx)", lastclp, REL_PTR(lastclp));
-
-  clumptotal = (uintptr_t) lastclp - (uintptr_t) clp;
-  DEBUG("expected clumptotal: %lu", clumptotal);
-
-  /*
-   * check that:
-   *
-   *   the overhead size (stuff up to CLUMP_OFFSET)
-   * + clumptotal
-   * + last clump marker (CHUNK_SIZE)
-   * + any bytes we rounded off the end
-   * = file size
-   */
-  if ((PMEM_CLUMP_OFFSET + clumptotal + (stbuf.st_size & (PMEM_CHUNK_SIZE - 1))
-      + PMEM_CHUNK_SIZE) == (size_t) stbuf.st_size) {
-    DEBUG("section sizes correctly add up to file size");
-  } else {
-    FATAL(
-        "CLUMP_OFFSET %d + clumptotal %lu + rounded %d + "
-        "CHUNK_SIZE %d = %lu, (not st_size %lu)",
-        PMEM_CLUMP_OFFSET,
-        clumptotal,
-        (stbuf.st_size & (PMEM_CHUNK_SIZE - 1)),
-        PMEM_CHUNK_SIZE,
-        PMEM_CLUMP_OFFSET + clumptotal + (stbuf.st_size & (PMEM_CHUNK_SIZE - 1)) + PMEM_CHUNK_SIZE,
-        stbuf.st_size);
-  }
-
-  if (clp->size == 0)
-    FATAL("no clumps found");
-
-  while (clp->size) {
-    size_t sz = clp->size & ~PMEM_STATE_MASK;
-    int state = clp->size & PMEM_STATE_MASK;
-
-    DEBUG("[%u]clump size %lu state %d", REL_PTR(clp), sz, state);
-    if (sz > stats[PMEM_STATE_UNUSED].largest)
-      stats[PMEM_STATE_UNUSED].largest = sz;
-    if (stats[PMEM_STATE_UNUSED].smallest == 0
-        || sz < stats[PMEM_STATE_UNUSED].smallest)
-      stats[PMEM_STATE_UNUSED].smallest = sz;
-    stats[PMEM_STATE_UNUSED].bytes += sz;
-    stats[PMEM_STATE_UNUSED].count++;
-
-    switch (state) {
-      case PMEM_STATE_FREE:
-        //DEBUG("clump state: free");
-        break;
-
-      case PMEM_STATE_RESERVED:
-        //DEBUG("clump state: reserved");
-        break;
-
-      case PMEM_STATE_ACTIVE:
-        //DEBUG("clump state: active");
-        break;
-
-      default:
-        FATAL("unknown clump state: %d", state);
-    }
-
-    if (sz > stats[state].largest)
-      stats[state].largest = sz;
-    if (stats[state].smallest == 0 || sz < stats[state].smallest)
-      stats[state].smallest = sz;
-    stats[state].bytes += sz;
-    stats[state].count++;
-
-    clp = (struct clump *) ((uintptr_t) clp + sz);
-    DEBUG("next clp 0x%lx, offset 0x%lx", clp, REL_PTR(clp));
-  }
-
-  if (clp == lastclp)
-    DEBUG("all clump space accounted for");
-  else
-    FATAL("clump list stopped at %lx instead of %lx", clp, lastclp);
-
-  if (munmap(pmp, stbuf.st_size) < 0)
-    FATALSYS("munmap");
-
-  // print the report
-  printf("Summary of pmem pool:\n");
-  printf("File size: %lu, %lu allocatable bytes in pool\n\n", stbuf.st_size,
-         clumptotal);
-  printf("     State      Bytes     Clumps    Largest   Smallest\n");
-  for (i = 0; i < PMEM_STATE_UNUSED + 1; i++) {
-    printf("%10s %10lu %10u %10lu %10lu\n", names[i], stats[i].bytes,
-           stats[i].count, stats[i].largest, stats[i].smallest);
-  }
-
-}
-

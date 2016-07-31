@@ -266,10 +266,10 @@ int vector_append(vector *v, const void *e, void **previous_tail)
 	if (previous_tail) {  //super hacky
 		if (v->count > 0) {
 			*previous_tail = v->data[v->count - 1];
-			printf("3\n");
+			/* printf("3\n"); */
 		} else {
 			*previous_tail = NULL;
-			printf("4\n");
+			/* printf("4\n"); */
 		}
 		/* Don't need to flush; caller will do it... */
 	}

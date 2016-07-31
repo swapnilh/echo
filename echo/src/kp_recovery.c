@@ -333,7 +333,7 @@ unsigned int flush_range(const void *addr, const size_t size)
 			break;
 		}
 		r_debug("calling clflush(%p) (%lu)\n", (void *)ptr, ptr);
-
+		PM_FLUSH(((void*)ptr), (64), (64));
 		__asm__ __volatile__ (
 				"clflush (%0)"
 				:                    /* no output registers */
