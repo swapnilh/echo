@@ -264,6 +264,18 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
             strcpy(pm_dst, src);                    	\
     })
 
+#define PM_STRNCPY(pm_dst, src, n)                      \
+    ({                                                  \
+            PM_TRACE("%d:%llu:%s:%p:%u:%s:%d\n",        \
+                        TENTRY_ID,                      \
+                        PM_WRT_MARKER,                  \
+                        (pm_dst),                       \
+                        (int)n),                        \
+                        LOC1,                           \
+                        LOC2);                          \
+            strncpy(pm_dst, src, n);                    \
+    })
+
 #define PM_MOVNTI(pm_dst, count, copied)            	\
     ({                                              	\
             PM_TRACE("%d:%llu:%s:%p:%lu:%lu:%s:%d\n",	\

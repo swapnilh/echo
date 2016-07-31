@@ -1,6 +1,6 @@
 // clibpm
 
-#include "../include/libpm.h"
+#include <clibpm.h>
 #include <pthread.h>
 
 pthread_mutex_t pmp_mutex;

@@ -25,7 +25,7 @@
 #include "../kp_common.h"
 #include "../include/kp_kv_local.h"
 #include "../include/kp_kv_master.h"
-#include "../include/libpm.h"
+#include "../include/clibpm.h"
 
 
 void *pmemalloc_init(const char *path, size_t size);
@@ -416,9 +416,7 @@ void *generic_worker_create(void *master_store) {
 
 /* Destroy the global/master store */
 void generic_store_destroy(void *store){
-  int rc = 0;
   kp_kv_master *master;
-  unsigned long tid = pthread_self();
 
   switch (WHICH_KEY_VALUE_STORE){
   case USE_KP_KV_STORE:
@@ -513,8 +511,7 @@ int generic_trans_end(void *store, void *trans){
 
 /* Returns: 0 if put succeeded, -1 if put failed. */
 int generic_put(void *store, void * trans, const char *key, const char *value, const size_t size){
-  const char* myval = value;
-  int rc, retval;
+  int retval;
   uint64_t rc64;
   kp_kv_local *kv;
 
@@ -2439,7 +2436,7 @@ int main(int argc, char *argv[]){
       //      ramp_up_threads(num_threads);
 //      m5_checkpoint(0,0);
       // Set the workload mix to get only puts
-      printf("%d GETS\n", 1-put_probability);
+      printf("%lf GETS\n", 1-put_probability);
       ramp_up_threads(num_threads);
 
 /*      // 20% get

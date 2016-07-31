@@ -10,7 +10,7 @@
 
 #include "kp_recovery.h"
 #include <string.h>
-#include "../include/libpm.h"
+#include <clibpm.h>
 
 #if 0
 /* This is an internal helper function, for now.

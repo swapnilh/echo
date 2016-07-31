@@ -13,8 +13,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/param.h>
-
-#include "../include/pm_instr.h"
+#include <pm_instr.h>
 
 // Logging
 
