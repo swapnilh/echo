@@ -466,7 +466,7 @@ void *generic_trans_start(void *store){
     kp_die("Request to use unknown KeyValueStore\n");
     break;
   }
-
+  PM_START_TX();
   return trans;
 }
 
@@ -505,7 +505,7 @@ int generic_trans_end(void *store, void *trans){
     kp_die("Request to use unknown KeyValueStore\n");
     break;
   }
-
+  PM_END_TX();
   return retval;
 }
 
@@ -1803,6 +1803,8 @@ void ramp_up_threads(int num_threads){
   rc = generic_trans_end(worker, trans);
   generic_worker_destroy(worker);
   measurement_in_progress = true;
+  assert(mtm_enable_trace == 0);
+  mtm_enable_trace = tmp_enable_trace;
 
   /* Create a single thread */
   for (i=0; i < num_threads; i++){
@@ -2106,7 +2108,7 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
     {"base", no_argument, &base_flag, 1},
     {"cache", no_argument, &cache_flag, 1},
     {"kpvm-dram", no_argument, &WHICH_KEY_VALUE_STORE, 0},
-    {"enable-trace", no_argument, &mtm_enable_trace, 0},
+    {"enable-trace", no_argument, &tmp_enable_trace, 0},
     {0, 0, 0, 0}
   };
 
@@ -2148,8 +2150,8 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
       break;
 
     case 'n':
-      kp_debug("case 'n': setting mtm_enable_trace=1\n");
-      mtm_enable_trace = 1;
+      kp_debug("case 'n': setting enable_trace=1\n");
+      tmp_enable_trace = 1;
       break;
 
     default:  //getopt_long() may return ':' or '?' for unrecognized/missing options
@@ -2200,14 +2202,14 @@ void parse_arguments(int argc, char *argv[], int *num_threads,
   value_size = atoi(argv[optind+3]);     //3
   merge_every = atoi(argv[optind+4]);    //4
   /* TODO add capability to alter these: */
-  put_probability = atoi(argv[optind+5]);//5 (optind+5)
-  update_probability = .7;               //6 (optind+6)
+  put_probability = ((float)(atoi(argv[optind+5])))*0.1;//5 (optind+5)
+  update_probability = ((float)(atoi(argv[optind+6])))*0.1;               //6 (optind+6)
   operations = atoi(argv[optind+7]);       //1
   *num_threads = atoi(argv[optind+8]);   //7
 
-  kp_debug("got arguments: CPUS=%d,iterations=%d, key_size=%d, value_size=%d, "
-           "merge_every=%d, put_probability=%f, update_probability=%f, "
-           "num_threads=%d operations=%d\n", NUM_CPUS,
+  fprintf(m_out, "got arguments: CPUS=%d\n,iterations=%d\n, key_size=%d\n, value_size=%d\n, "
+           "merge_every=%d\n, put_probability=%f\n, update_probability=%f\n, "
+           "num_threads=%d\n operations=%d\n\n", NUM_CPUS,
            iterations, key_size, value_size, merge_every, put_probability,
            update_probability, *num_threads, operations);
 

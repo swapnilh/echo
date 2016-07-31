@@ -24,7 +24,7 @@ char *tbuf;
 pthread_spinlock_t tbuf_lock;
 unsigned long long tbuf_sz;
 unsigned long long n_tentry = 0;
-int mtm_enable_trace = 0;
+int mtm_enable_trace = 0, tmp_enable_trace = 0;
 int mtm_debug_buffer = 1;
 struct timeval glb_time;
 unsigned long long start_buf_drain = 0, end_buf_drain = 0, buf_drain_period = 0;
