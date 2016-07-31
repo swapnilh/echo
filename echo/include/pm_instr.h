@@ -29,7 +29,7 @@
 #define m_err stderr
 
 #define TSTR_SZ         128
-#define MAX_TBUF_SZ     512   /* bytes */
+#define MAX_TBUF_SZ     512*1024*1024   /* bytes */
 
 extern __thread struct timeval mtm_time;
 extern __thread int mtm_tid;
@@ -42,7 +42,7 @@ extern char *tbuf;
 extern unsigned long long tbuf_sz;
 extern unsigned long long n_tentry;
 extern pthread_spinlock_t tbuf_lock;
-extern int mtm_enable_trace;
+extern int mtm_enable_trace, tmp_enable_trace;
 extern int mtm_debug_buffer;
 extern struct timeval glb_time;
 extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
@@ -371,6 +371,9 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
                 LOC1,                           	\
                 LOC2);                          	\
     })
+
+#define PM_START_TX     start_txn
+#define PM_END_TX       end_txn
 
 /* PM Persist operations 
  * (done/copied) followed by count to maintain 
