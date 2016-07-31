@@ -178,78 +178,6 @@ void check() {
 
 }
 
-// pmemalloc_recover -- recover after a possible crash
-static void pmemalloc_recover(void* pmp) {
-  struct clump *clp;
-
-  DEBUG("pmp=0x%lx", pmp);
-
-  clp = (struct clump *)ABS_PTR((struct clump *) PMEM_CLUMP_OFFSET);
-
-  while (clp->size) {
-    size_t sz = clp->size & ~PMEM_STATE_MASK;
-    int state = clp->size & PMEM_STATE_MASK;
-    DEBUG("[0x%lx]clump size %lu state %d", (struct clump *) REL_PTR(clp), sz, state);
-
-    switch (state) {
-      case PMEM_STATE_RESERVED:
-        /* return the clump to the FREE pool */
-        clp->size = sz | PMEM_STATE_FREE;
-        pmem_persist(clp, sizeof(*clp), 0);
-        break;
-    }
-
-    clp = (struct clump *) ((uintptr_t) clp + sz);
-    DEBUG("next clp %lx, offset 0x%lx", clp, (struct clump *) REL_PTR(clp));
-  }
-}
-
-// pmemalloc_coalesce -- find adjacent free blocks and coalesce across pool
-static void pmemalloc_coalesce(void* pmp) {
-  struct clump *clp;
-  struct clump *firstfree;
-  struct clump *lastfree;
-  size_t csize;
-
-  DEBUG("pmp=0x%lx", pmp);
-
-  firstfree = lastfree = NULL;
-  csize = 0;
-  clp = (struct clump *)ABS_PTR((struct clump *) PMEM_CLUMP_OFFSET);
-
-  while (clp->size) {
-    size_t sz = clp->size & ~PMEM_STATE_MASK;
-    int state = clp->size & PMEM_STATE_MASK;
-
-    DEBUG("[0x%lx]clump size %lu state %d", (struct clump *)REL_PTR(clp), sz, state);
-
-    if (state == PMEM_STATE_FREE) {
-      if (firstfree == NULL)
-        firstfree = clp;
-      else
-        lastfree = clp;
-      csize += sz;
-    } else if (firstfree != NULL && lastfree != NULL) {
-      firstfree->size = csize | PMEM_STATE_FREE;
-      pmem_persist(firstfree, sizeof(*firstfree), 0);
-      firstfree = lastfree = NULL;
-      csize = 0;
-    } else {
-      firstfree = lastfree = NULL;
-      csize = 0;
-    }
-
-    clp = (struct clump *) ((uintptr_t) clp + sz);
-    DEBUG("next clp %lx, offset 0x%lx", clp, (struct clump *)REL_PTR(clp));
-  }
-
-  if (firstfree != NULL && lastfree != NULL) {
-    firstfree->size = csize | PMEM_STATE_FREE;
-    pmem_persist(firstfree, sizeof(*firstfree), 0);
-  }
-
-}
-
 // pmemalloc_init -- setup a Persistent Memory pool for use
 void *pmemalloc_init(const char *path, size_t size) {
   int err;
@@ -337,17 +265,6 @@ void *pmemalloc_init(const char *path, size_t size) {
     perror("mapping failed ");
     goto out;
   }
-
-  /*
-   * scan pool for recovery work, five kinds:
-   *  1. pmem pool file sisn't even fully setup
-   *  2. RESERVED clumps that need to be freed
-   *  3. ACTIVATING clumps that need to be ACTIVE
-   *  4. FREEING clumps that need to be freed
-   *  5. adjacent free clumps that need to be coalesced
-   */
-  // pmemalloc_recover(pmp);
-  // pmemalloc_coalesce(pmp);
 
   return pmp;
 
