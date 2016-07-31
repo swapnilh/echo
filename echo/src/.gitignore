@@ -3,5 +3,9 @@ delete/
 *.o
 *.so*
 *.out
-obj/
+obj/*
 evaluation/*.o
+*.log
+*.txt
+.*.swp
+*trace*
