@@ -79,7 +79,6 @@ void pcm_calloc(void **ptr, size_t size)
 	 *   Is this necessary? Way too expensive??
 	 */
 	*ptr = pmalloc(size);
-	//pmemalloc_activate(*ptr);
 	flush_range(*ptr, size);  //only has an effect if FLUSH_IT defined
 }
 
@@ -90,7 +89,7 @@ void pcm_malloc(void **ptr, size_t size)
 	 * it is telling us that it doesn't care about the initial state of
 	 * the memory (because this object doesn't have a "state" field or
 	 * and pointers that need to be initialized to a known value!). */
-	*ptr = malloc(size);
+	*ptr = pmalloc(size);
 }
 
 void pcm_free(void **ptr)
@@ -100,7 +99,7 @@ void pcm_free(void **ptr)
 	 * just a straight free: we don't need to flush the memory or
 	 * anything. We still set *ptr to NULL because a bunch of our code
 	 * expects this to happen. */
-	free(*ptr);
+	pfree(*ptr);
 	*ptr = NULL;
 #if 0
 	/* We copy the pointer value, set it to NULL and flush it _before_
@@ -219,8 +218,11 @@ void kp_free(void **ptr, bool use_nvm)
 {
 	/* calloc vs. malloc doesn't matter in this function, only use_nvm vs.
 	 * not. */
-	if (use_nvm) {
+	if ((unsigned long long)LIBPM <= (unsigned long long)*ptr \
+		&& (unsigned long long)*ptr <= ((unsigned long long)LIBPM + (PMSIZE)))
+ 	{
 		/* pcm_free() is the same as the else case now... */
+		assert(use_nvm == true);
 		pcm_free(ptr); 
 	} else {
 		free_v(*ptr);

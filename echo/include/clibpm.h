@@ -100,14 +100,15 @@ struct clump {
 };
 
 
-#define ABS_PTR(p) (pmp + (uintptr_t)p)
+#define ABS_PTR(p) (void*)((uintptr_t)pmp + (uintptr_t)p)
 #define REL_PTR(p) ((uintptr_t)p - (uintptr_t)pmp)
 
 /* 64B cache line size */
 #define ALIGN 64
 /* To match Mnemosyne and reuse trace processing tools */
 #define LIBPM 0x0000100000000000
-#define PMSIZE (3UL * 1024 * 1024 * 1024)
+// #define PMSIZE (3UL * 1024 * 1024 * 1024)
+#define PMSIZE (1UL * 1024 * 1024 * 1024)
 
 static inline void *
 pmem_map(int fd, size_t len) {
@@ -175,5 +176,5 @@ static inline void __pmem_persist(void *addr, size_t len, int flags) {
 extern void *pmemalloc_init(const char *path, size_t size);
 extern void* pmalloc(size_t sz);
 extern void pfree(void*);
-extern void *pmemalloc_init(const char *path, size_t size);
+extern void pmemalloc_display(void);
 
