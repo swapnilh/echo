@@ -104,7 +104,7 @@ jemalloc:
 _EVOBJ	= $(_OBJ) evaluation/evaluation.o 
 EVOBJ 	= $(patsubst %,$(ODIR)/%,$(_EVOBJ))
 
-evaluation: kp_kvstore-static evaluation/evaluation.o clibpm.o
+evaluation: kp_kvstore-shared evaluation/evaluation.o clibpm.o
 	$(CC) -o evaluation/evaluation evaluation/evaluation.o  $(CFLAGS) $(LIBS)  $(KPKVLIBS)
 evaluation-shared: kp_kvstore-shared evaluation/evaluation.o 
 	$(CC) -o evaluation/evaluation evaluation/evaluation.o $(CFLAGS) $(LIBS) $(KPKVLIBS)
