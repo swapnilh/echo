@@ -31,6 +31,11 @@
 #define TSTR_SZ         128
 #define MAX_TBUF_SZ     512*1024*1024   /* bytes */
 
+#define PSEGMENT_RESERVED_REGION_START 0x0000100000000000
+#define PSEGMENT_RESERVED_REGION_SIZE (3UL * 1024 * 1024 * 1024)
+#define PSEGMENT_RESERVED_REGION_END     (PSEGMENT_RESERVED_REGION_START +    \
+                                          PSEGMENT_RESERVED_REGION_SIZE)
+
 extern __thread struct timeval mtm_time;
 extern __thread int mtm_tid;
 
@@ -42,13 +47,23 @@ extern char *tbuf;
 extern unsigned long long tbuf_sz;
 extern unsigned long long n_tentry;
 extern pthread_spinlock_t tbuf_lock;
+extern pthread_spinlock_t tot_epoch_lock;
 extern int mtm_enable_trace, tmp_enable_trace;
 extern int mtm_debug_buffer;
+extern int tracing_on, trace_marker;
 extern struct timeval glb_time;
 extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
+extern unsigned long long tot_epoch;
+
+extern __thread int reg_write;
+extern __thread unsigned long long n_epoch;
+extern void __pm_trace_print(int,  ...);
+extern unsigned long long get_tot_epoch_count(void);
 
 
 #define die()	{assert(0);}
+
+#ifdef _ENABLE_TRACE
 #define time_since_start				\
 	({						\
 		gettimeofday(&mtm_time, NULL);		\
@@ -62,7 +77,6 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
 		({mtm_tid = syscall(SYS_gettid); mtm_tid;}) : mtm_tid), \
 	(time_since_start)				
 
-#ifdef _ENABLE_TRACE
 #define pm_trace_print(format, args ...)		\
     {							\
 	if(mtm_enable_trace) {				\
@@ -105,14 +119,28 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
 	pthread_spin_unlock(&tbuf_lock);		\
 	}						\
     }
+#elif _ENABLE_FTRACE
+/* Standard kernel-mode, non-blocking tracer.  */
+#define TENTRY_ID (int)0 ,(unsigned long long)0
+#define pm_trace_print(format, args ...)                                        \
+    {                                                                           \
+        if(mtm_enable_trace) {                                                  \
+                sprintf(tstr, format, args);                                    \
+                tsz = strlen(tstr);                                             \
+                write(trace_marker, tstr+4, tsz-4);                             \
+        }                                                                       \
+    }
 #else
-#define pm_trace_print(args ...)	{;}
+#define TENTRY_ID (int)0
+#define pm_trace_print(format, args ...) {__pm_trace_print(0, args);}
 #endif
 
 #define PM_TRACE                        pm_trace_print
 
 /* Cacheable PM write */
 #define PM_WRT_MARKER                   "PM_W"
+#define PM_DWRT_MARKER                  "PM_DW" /* Cacheable data write */
+#define PM_DI_MARKER                    "PM_DI" /* Un-cacheable data write */
 
 /* Cacheable PM read */
 #define PM_RD_MARKER                    "PM_R"
@@ -239,7 +267,20 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
                         LOC1,                   	\
                         LOC2);                  	\
             memcpy(pm_dst, src, sz);                	\
+    })      
+        
+#define PM_DMEMCPY(pm_dst, src, sz)                  	\
+    ({                                              	\
+            PM_TRACE("%d:%llu:%s:%p:%lu:%s:%d\n",    	\
+			TENTRY_ID,		    	\
+                        PM_DWRT_MARKER,              	\
+                        (pm_dst),                   	\
+                        (unsigned long)sz,          	\
+                        LOC1,                   	\
+                        LOC2);                  	\
+            memcpy(pm_dst, src, sz);                	\
     })              
+
 
 #define PM_RNGCPY(pm_dst, sz)                  		\
     ({                                              	\
@@ -275,6 +316,19 @@ extern unsigned long long glb_tv_sec, glb_tv_usec, glb_start_time;
                         LOC2);                          \
             strncpy(pm_dst, src, n);                    \
     })
+
+#define PM_DSTRNCPY(pm_dst, src, n)                     \
+    ({                                                  \
+            PM_TRACE("%d:%llu:%s:%p:%u:%s:%d\n",        \
+                        TENTRY_ID,                      \
+                        PM_DWRT_MARKER,                 \
+                        (pm_dst),                       \
+                        (int)n),                        \
+                        LOC1,                           \
+                        LOC2);                          \
+            strncpy(pm_dst, src, n);                    \
+    })
+
 
 #define PM_MOVNTI(pm_dst, count, copied)            	\
     ({                                              	\

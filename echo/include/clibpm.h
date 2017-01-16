@@ -106,9 +106,9 @@ struct clump {
 /* 64B cache line size */
 #define ALIGN 64
 /* To match Mnemosyne and reuse trace processing tools */
-#define LIBPM 0x0000100000000000
-// #define PMSIZE (3UL * 1024 * 1024 * 1024)
-#define PMSIZE (1UL * 1024 * 1024 * 1024)
+#define LIBPM PSEGMENT_RESERVED_REGION_START
+#define PMSIZE PSEGMENT_RESERVED_REGION_SIZE
+
 
 static inline void *
 pmem_map(int fd, size_t len) {
@@ -146,7 +146,8 @@ static inline void __pmem_persist(void *addr, size_t len, int flags) {
   		uintptr_t uptr = (uintptr_t) addr & ~(ALIGN - 1);		\
   		uintptr_t end = (uintptr_t) addr + len;				\
   		for (; uptr < end; uptr += ALIGN) {				\
-			PM_FLUSH(((void*)uptr), ALIGN, ALIGN);			\
+    			 __builtin_ia32_clflush((void *) uptr);			\
+			/* PM_FLUSH(((void*)uptr), ALIGN, ALIGN); */		\
   		}								\
 	}
 #define pmem_persist(addr, len, flags)						\

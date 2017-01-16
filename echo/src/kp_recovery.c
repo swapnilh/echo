@@ -173,7 +173,7 @@ void kp_realloc(void **ptr, size_t new_size, size_t old_size, bool use_nvm)
 void kp_memcpy(void *dest, const void *src, size_t n, bool use_nvm)
 {
 	if(use_nvm)
-		PM_MEMCPY(dest, src, n);
+		PM_DMEMCPY(dest, src, n);
 	else
 		memcpy(dest, src, n);
 	if (use_nvm) {
@@ -199,7 +199,7 @@ void kp_strncpy(char *dest, const char *src, size_t n, bool use_nvm)
 #else
 	char *ret;
 	if(use_nvm)
-		ret = PM_STRNCPY(dest, src, n);
+		ret = PM_DSTRNCPY(dest, src, n);
 	else
 		ret = strncpy(dest, src, n);
 	if (ret != dest) {
@@ -335,7 +335,7 @@ unsigned int flush_range(const void *addr, const size_t size)
 			break;
 		}
 		r_debug("calling clflush(%p) (%lu)\n", (void *)ptr, ptr);
-		PM_FLUSH(((void*)ptr), (64), (64));
+		// PM_FLUSH(((void*)ptr), (64), (64));
 		__asm__ __volatile__ (
 				"clflush (%0)"
 				:                    /* no output registers */
